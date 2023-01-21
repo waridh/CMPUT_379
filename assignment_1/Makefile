@@ -1,11 +1,11 @@
 CC = g++
 C_FLAGS = -std=c++11 -g -Wall
 
-we7_solution: climbing.o
+p1q1: part1q1.o
 	$(CC) -o $@ $<
 
-climbing.o: climbing.cpp
+part1q1.o: part1q1.cpp
 	$(CC) $(C_FLAGS) -c $<
 
 clean:
-	rm -f we7_solution *.o
+	rm -f p1q1 *.o
