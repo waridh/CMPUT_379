@@ -7,4 +7,5 @@ while(fgets(buf, MAXLINE, stdin) != NULL)  {
 
 // Time for some C fragments
 
+buf[strcspn(buf, "\n")] = 0;
 
