@@ -17,6 +17,35 @@ Arguments:
   count:  The number of obtained tokens.
 */
 
-char WSPACE[] = "\n \t";
+#define MAXLINE 128
+#define MAXWORD 20
+
+int main()  {
+
+  // Simple data structure for storing obtained tokens
+  typedef struct  {
+    char toker[MAXLINE/2][MAXWORD];
+    unsigned int count;
+
+  }  token;
+  // Initialize the token type
+  token tok;
+
+  memset(&tok, 0, sizeof(tok));
+
+  // The count
+  tok.count = 0;
+  // The delimiters
+  char WSPACE[] = "\n \t";
+
+  // Creating the output in sigular token.
+  char *tok = strtok(inStr, WSPACE);
+
+  while (tok != NULL)  {
+    // Adding to the count
+    count++;
+    tok = strtok(NULL, WSPACE);
+}
+}
 
 
