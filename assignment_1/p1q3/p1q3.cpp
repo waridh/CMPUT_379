@@ -55,23 +55,15 @@ int main()  {
 
   while (buffet != NULL)  {
     cout << buffet << endl;
-		/*
-		Instead of dynamically allocating for this part of the assignment,
-		I am taking advantage of the constraint given in the question. I am now
-		using the limit of characters per line and per word. Since a word is at
-		most 19 characters long, and being a character array, we can use a for
-		loop that iterates through the output from strtok and place the
-		characters one by one into the struct. Because of the word size limit,
-		runtime is not affected as heavily as when there is no limit on size.
-		*/
-		for (unsigned int i=0; i < sizeof(buffet); i++)  {
-			tok.toker[count][i] = buffet[i];
-		};
+		// Using strcpy to move the token into the struct
+		strcpy(tok.toker[count], buffet);	
 		// Adding to the count
 		count++;
+		// Obtaining the next token
     buffet = strtok(NULL, WSPACE);
 	};
-
+	
+	// We are debugging using this. Print out the struct
 	for (unsigned int i=0; i<count; i++)  {
 		cout << tok.toker[i] << endl;
 	}
