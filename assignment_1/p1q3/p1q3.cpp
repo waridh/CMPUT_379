@@ -32,8 +32,8 @@ int main()  {
 		string and the max length of a word. The max number of words is the
 		character limit per line given in question 2 divided by two, as each word
 		must have an accompanying delimiter. The other axis size is based on the
-		max length of characters per word. This is just 19 characters + \0 to make
-		a string.
+		max length of characters per word. This is just going to be 20 based on question
+		2.
 		*/
     char toker[MAXLINE/2][MAXWORD];
 		
