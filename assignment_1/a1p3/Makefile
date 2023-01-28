@@ -1,21 +1,19 @@
-C = g++
+CC = g++
 C_FLAGS = -std=c++11 -g -Wall
-BASHRC_PATH = ~/.bashrc
 
 # The top command is to compile the program and assign an alias for it
-all: a1p2
-# Trying to write to ~/.bashrc using make 
+all: a1p3 
 
 # Simply turning the object into an executable
-a1p2: a1p2.o
+a1p3: a1p3.o
 	$(CC) -o $@ $<
 
 # Creating the C++ object
-a1p2.o: a1p2.cpp
+a1p3.o: a1p3.cpp
 	$(CC) $(C_FLAGS) -c $<
 
 # For cleaning
 .PHONY: clean
 clean:
-	rm -f a1p2 out1 *.o
+	rm -f a1p3 *.o
 
