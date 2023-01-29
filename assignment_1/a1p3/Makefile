@@ -6,13 +6,13 @@ all: a1p3
 
 # Quick running the program
 a1p30: a1p3
-	./a1p3 0
+	./a1p3 0 < testInput
 
 a1p31: a1p3
-	./a1p3 1
+	./a1p3 1 < testInput
 
 a1p3neg: a1p3
-	./a1p3 -1
+	./a1p3 -1 < testInput
 
 # Simply turning the object into an executable
 a1p3: a1p3.o
