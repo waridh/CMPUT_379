@@ -3,8 +3,9 @@
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
-#include <sys/times.h>
 #include <string>
+#include <sys/times.h>
+ #include <sys/wait.h>
 #include <unistd.h>
 
 #define MAXLINE 128		// Max # of characters in an input line
@@ -62,11 +63,23 @@ void collectinputs(std::string rawlines[])  {
 	return;
 }
 
-void runline(string cmdline, pid_t pid)  {
+void runline(std::string cmdline, pid_t &pid)  {
 	/*
 	This function will run the cmdline given by the input
 	*/
-
+	pid = fork();
+	if (pid < 0)  {
+		std::cout << "Forking failed" << std::endl;
+		std::cout << "Exiting program..." << std::endl;
+		exit(EXIT_FAILURE);
+	}  else if (pid == 0)  {
+		// This is the child process
+		execlp("timeout", "timeout", "3", "./myclock", "outA", (char*) NULL);
+		exit(EXIT_SUCCESS);
+	}  else  {
+		// This the is parent process. PID is the child id
+		wait(NULL);
+	};
 	return;
 }
 
@@ -81,6 +94,7 @@ int main(int argc, char *argv[])  {
 	long clktck=sysconf(_SC_CLK_TCK);
 	clock_t time1, time2;
 	struct tms cpu1; struct tms cpu2;
+	pid_t pid; std::string test = "test";
 
 	// The initial time
 	time1 = times(&cpu1);
@@ -90,8 +104,8 @@ int main(int argc, char *argv[])  {
 
 //=============================================================================
 	// Trying to execute the programs in the inputs
-
-
+	
+	runline(test, pid);
 
 //=============================================================================
 
