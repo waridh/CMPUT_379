@@ -17,8 +17,8 @@ typedef struct	{
 	/*	This is basically the same struct as from the first part where we were
 	collecting those tokens.
 	*/
-	char token[MAXLINE/2][MAXWORD];
-}	token;
+	char token[MAX_NTOKEN + 1][MAXWORD + 1];
+}	tokens;
 
 void	notenoughargs()  {
 	// Functionalized the error
@@ -61,12 +61,51 @@ void collectinputs(std::string rawlines[])  {
 		std::cout << rawlines[i] << std::endl;
 	}
 	return;
-}
+};
 
-void runline(std::string cmdline, pid_t &pid)  {
+//=============================================================================
+// This section is for putting the string inputs from the stdin into the exec
+
+unsigned int gettokens(std::string &cmdline, tokens *toks)  {
+	/*This function will get the tokens and get an array of cstrings back*/
+	// char **tokener = new char*[MAX_NTOKEN+1];
+	char token3[MAXWORD];
+	std::string token4[MAX_NTOKEN + 1];
+	std::cout << MAX_NTOKEN + 1 << std::endl;
+
+	char * cmdline2 = new char[cmdline.length() + 1];
+	strcpy(cmdline2, cmdline.c_str());
+	// Getting the whitespaces
+	char WSPACE[] = " \t"; char *buffet = strtok(cmdline2, WSPACE);
+	unsigned int count = 0;
+
+	while (buffet != NULL)  {
+		std::cout << count << std::endl;
+		std::cout << buffet << std::endl;
+		// Using strcpy to move the token to the struct
+		// tokener[count] = new char[MAXWORD + 1];
+		std::cout << "allocated" << std::endl;
+		strcpy(token3, buffet);
+		strcpy(toks -> token[count], token3);
+		// strcpy(tokener[count], buffet);
+		token4[count] = buffet;
+
+		count++;
+		std::cout << toks -> token[count] << std::endl;
+		// std::cout << *(tokener + count) << std::endl;
+		std::cout << token3 << std::endl;
+		std::cout << token4[count] << std::endl;
+		buffet = strtok(NULL, WSPACE);
+	};
+	delete[] cmdline2;
+	return count;
+};
+
+void runline(std::string &cmdline, pid_t &pid)  {
 	/*
 	This function will run the cmdline given by the input
 	*/
+	//TODO This stupid function
 	pid = fork();
 	if (pid < 0)  {
 		std::cout << "Forking failed" << std::endl;
@@ -74,6 +113,22 @@ void runline(std::string cmdline, pid_t &pid)  {
 		exit(EXIT_FAILURE);
 	}  else if (pid == 0)  {
 		// This is the child process
+		tokens toks;
+		memset(&toks, 0, sizeof(toks));
+
+		
+		char cmdline2 = new char[cmdline.length() + 1];
+		strcpy(cmdline2, cmdline.c_str());
+		char WSPACE[] = "\t ", *buffer = strtok(cmdline2, WSPACE);
+		unsigned int count = 0;
+
+		// Debugging
+		std::cout << "Debugging the tokens struct" << std::endl;
+		std::cout << count << std::endl;
+		for (unsigned int i = 0; i < count; i++)  {
+			std::cout << toks.token[count] << std::endl;
+		}
+
 		execlp("timeout", "timeout", "3", "./myclock", "outA", (char*) NULL);
 		exit(EXIT_SUCCESS);
 	}  else  {
@@ -81,7 +136,7 @@ void runline(std::string cmdline, pid_t &pid)  {
 		wait(NULL);
 	};
 	return;
-}
+};
 
 int main(int argc, char *argv[])  {
 	if (argc < 2)  {
@@ -94,7 +149,7 @@ int main(int argc, char *argv[])  {
 	long clktck=sysconf(_SC_CLK_TCK);
 	clock_t time1, time2;
 	struct tms cpu1; struct tms cpu2;
-	pid_t pid; std::string test = "test";
+	pid_t pid; std::string test = "timeout 3 ./myclock outA";
 
 	// The initial time
 	time1 = times(&cpu1);

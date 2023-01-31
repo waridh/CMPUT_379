@@ -35,7 +35,7 @@ int main()  {
 		max length of characters per word. This is just going to be 20 based on question
 		2.
 		*/
-    char toker[MAXLINE/2][MAXWORD];
+    char toker[MAXLINE/2][MAXWORD + 1];
 		
   }  token;
 
