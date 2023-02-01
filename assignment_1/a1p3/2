@@ -28,11 +28,11 @@ void	notenoughargs()  {
 	exit(EXIT_SUCCESS);
 };
 
-unsigned int getlines(std::string buffers[])  {
+void getlines(std::string buffers[])  {
 	/*
 	This function gets a line from the standard input
 	*/
-	unsigned int linecount = 0;
+	int linecount = 0;
 	std::string buffer;
 
 	// Simply get all the line from the input stream
@@ -47,17 +47,20 @@ unsigned int getlines(std::string buffers[])  {
 	};
 	std::cout << "We have taken all the inputs" << std::endl;
 	
-	return linecount;
+	return;
 };
 
-unsigned int collectinputs(std::string rawlines[])  {
+void collectinputs(std::string rawlines[])  {
 	/*
 	This function collects all the lines of the standard inputs
 	*/
 	// Allocated an extra room so that getline() doesn't segmentation fault
-	unsigned int lines = getlines(rawlines);
+	getlines(rawlines);
 
-	return lines;
+	for (int i = 0; i < 5; i++)  {
+		std::cout << rawlines[i] << std::endl;
+	}
+	return;
 };
 
 //=============================================================================
@@ -79,6 +82,7 @@ unsigned int gettokens(std::string &cmdline, tokens &tok)  {
   char *buffet = strtok(inStr, WSPACE);
 
   while (buffet != NULL)  {
+    std::cout << buffet << std::endl;
 		// Using strcpy to move the token into the struct
 		strcpy(tok.token[count], buffet);	
 		// Adding to the count
@@ -87,15 +91,19 @@ unsigned int gettokens(std::string &cmdline, tokens &tok)  {
     buffet = strtok(NULL, WSPACE);
 	};
 	
+	// We are debugging using this. Print out the struct
+	for (unsigned int i=0; i<count; i++)  {
+		std::cout << tok.token[i] << std::endl;
+	};
 	return count;
 };
 
-void runline(std::string &cmdline)  {
+void runline(std::string &cmdline, pid_t &pid)  {
 	/*
 	This function will run the cmdline given by the input
 	*/
 	//TODO This stupid function
-	pid_t pid = fork();
+	pid = fork();
 	if (pid < 0)  {
 		std::cout << "Forking failed" << std::endl;
 		std::cout << "Exiting program..." << std::endl;
@@ -103,14 +111,7 @@ void runline(std::string &cmdline)  {
 	}  else if (pid == 0)  {
 		// This is the child process
 		tokens toks;
-		unsigned int count = gettokens(cmdline, toks);
-		std::cout << "Testing if it works in fork" << std::endl;
-
-		for (unsigned int i = 0; i < count; i++)  {
-			// Checking that it works
-			std::cout << toks.token[i] << std::endl;
-		}
-		std::cout << "done testing in the fork" << std::endl;
+		gettokens(cmdline, toks);
 		
 		execlp("timeout", "timeout", "3", "./myclock", "outA", (char*) NULL);
 		exit(EXIT_SUCCESS);
@@ -120,18 +121,6 @@ void runline(std::string &cmdline)  {
 	};
 	return;
 };
-
-void childcontroller(std::string *fullinput, unsigned int &lines)  {
-	// This function will send the command from input to child processes.
-	std::cout << fullinput[0] << std::endl;
-	std::cout << lines << std::endl;
-	for (unsigned int i = 0; i < lines; i++)  {
-		// Running the lines
-		printf("Running line %i\n=============================================", i);
-		runline(fullinput[i]);
-	}
-	return;
-}
 
 int main(int argc, char *argv[])  {
 	if (argc < 2)  {
@@ -144,19 +133,54 @@ int main(int argc, char *argv[])  {
 	long clktck=sysconf(_SC_CLK_TCK);
 	clock_t time1, time2;
 	struct tms cpu1; struct tms cpu2;
-	std::string test = "timeout 3 ./myclock outA";
+	pid_t pid; std::string test = "timeout 3 ./myclock outA";
 
 	// The initial time
 	time1 = times(&cpu1);
 
 	// Initializing for input and then take it. Intermediate variable
-	std::string intermediateStr[NPROC + 1];
-	unsigned int lines = collectinputs(intermediateStr);
+	std::string intermediateStr[NPROC + 1]; collectinputs(intermediateStr);
+//=============================================================================
+	// Tokenizing the input string
+	tokens tok;
+	std::cout << "We are testing the function in main" << std::endl;
+	/*This function will get the tokens and get an array of cstrings back*/
+	// char **tokener = new char*[MAX_NTOKEN+1];
+// Clearing the structure.
+  memset(&tok, 0, sizeof(tok));
+	// Sample string for testing
+	char *inStr = new char[test.length() + 1];
 
+	strcpy(inStr, test.c_str());
+  // Initialize the count
+  unsigned int count = 0;
+  // The delimiters
+  char WSPACE[] = "\n \t";
+
+  // Creating the output in sigular token.
+  char *buffet = strtok(inStr, WSPACE);
+
+  while (buffet != NULL)  {
+    std::cout << buffet << std::endl;
+		// Using strcpy to move the token into the struct
+		strcpy(tok.token[count], buffet);	
+		// Adding to the count
+		count++;
+		// Obtaining the next token
+    buffet = strtok(NULL, WSPACE);
+	};
+	
+	// We are debugging using this. Print out the struct
+	for (unsigned int i=0; i<count; i++)  {
+		std::cout << tok.token[i] << std::endl;
+	}
+	
+	std::cout << "We are done the test" << std::endl;
+	gettokens(test, tok);
 
 //=============================================================================
 	// Trying to execute the programs in the inputs
-	childcontroller(intermediateStr, lines);
+	runline(test, pid);
 
 //=============================================================================
 
