@@ -17,7 +17,7 @@ typedef struct	{
 	/*	This is basically the same struct as from the first part where we were
 	collecting those tokens.
 	*/
-	char token[MAX_NTOKEN + 1][MAXWORD + 1];
+	char token[MAX_NTOKEN + 1][MAXWORD + 1];	
 }	tokens;
 
 void	notenoughargs()  {
@@ -85,7 +85,7 @@ unsigned int gettokens(std::string &cmdline, tokens &tok)  {
 		count++;
 		// Obtaining the next token
     buffet = strtok(NULL, WSPACE);
-	};
+	};	
 	
 	return count;
 };
@@ -103,16 +103,18 @@ void runline(std::string &cmdline)  {
 	}  else if (pid == 0)  {
 		// This is the child process
 		tokens toks;
-		unsigned int count = gettokens(cmdline, toks);
-		std::cout << "Testing if it works in fork" << std::endl;
-
-		for (unsigned int i = 0; i < count; i++)  {
-			// Checking that it works
-			std::cout << toks.token[i] << std::endl;
-		}
-		std::cout << "done testing in the fork" << std::endl;
+		 unsigned int count = gettokens(cmdline, toks);
+		 // We need to convert the type to something that execvp can read
+		 char * args[MAX_NTOKEN + 1];
+		 for (int i = 0; i < MAX_NTOKEN + 1; i++)  {
+			 // Transfer the tokens from the struct to this one
+			 args[i] = toks.token[i];
+		 };
+		 args[MAX_NTOKEN + 1] = NULL;
 		
-		execlp("timeout", "timeout", "3", "./myclock", "outA", (char*) NULL);
+		// Now we need to input the characters into execlp
+		char * arglist[] = {"timeout", "3", "./myclock", "outA", NULL};
+		execvp(args[0], args);
 		exit(EXIT_SUCCESS);
 	}  else  {
 		// This the is parent process. PID is the child id
@@ -127,7 +129,7 @@ void childcontroller(std::string *fullinput, unsigned int &lines)  {
 	std::cout << lines << std::endl;
 	for (unsigned int i = 0; i < lines; i++)  {
 		// Running the lines
-		printf("Running line %i\n=============================================", i);
+		printf("Running line %i\n=============================================\n", i);
 		runline(fullinput[i]);
 	}
 	return;
