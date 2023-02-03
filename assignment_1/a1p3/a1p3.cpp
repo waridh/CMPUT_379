@@ -203,12 +203,23 @@ void timeprint(
 	struct tms &cpu2)  {
 	// This function will try to print to format of figure 8.31
 	static long clktck = 0;
-	if (clktck == 0)  {
+	if (clktck == 0)  {  // If we don't already have the tick
 		clktck=sysconf(_SC_CLK_TCK);
+    if (clktck < 0)  {
+      std::cout << "sysconf error" << std::endl;
+      exit(EXIT_FAILURE);
+    }
 	}
-	float final_time = (time2 - time1) / clktck;
-	std::cout << final_time << std::endl;
-
+  clock_t real = time2 - time1;
+  printf(" real: %7.2f sec.\n", (time2 - time1) / (double) clktck);
+  printf(" user: %7.2f sec.\n",
+  (cpu2.tms_utime - cpu1.tms_utime) / (double) clktck);
+  printf(" sys: %7.2f sec.\n",
+  (cpu2.tms_stime - cpu1.tms_stime) / (double) clktck);
+  printf(" child user: %7.2f sec.\n",
+  (cpu2.tms_cutime - cpu1.tms_cutime) / (double) clktck);
+  printf(" child sys: %7.2f sec.\n",
+  (cpu2.tms_cstime - cpu1.tms_cstime) / (double) clktck);
 	return;
 }
 
