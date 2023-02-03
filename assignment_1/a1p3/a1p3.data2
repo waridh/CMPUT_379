@@ -1,0 +1,11 @@
+# This file is the deliverable test file. There will be NPROC = 5 and each line
+# Will run for at least 5 seconds. Comments will be put in the pdf attached.
+
+timeout 5 ./myclock out2
+
+timeout 5 ./myclock out3
+timeout 5 ./myclock out4
+
+timeout 5 ./myclock out5
+
+timeout 5 ./myclock out6
