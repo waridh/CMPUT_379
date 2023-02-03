@@ -158,7 +158,10 @@ void childcontroller(
 	}  else if ((argv[1][0] == '1') && (strlen(argv[1]) == 1))  {
 		// We want to wait for exactly 1 child to return before continuing
 		std::cout << "Waiting for one child process" << std::endl;
-		waitpid(-1, &status, 0);
+		pid = waitpid(-1, &status, 0);
+    std::cout << std::endl;
+    std::cout << "process (" << pid << "): exited (status = " << status
+    << ')' << std::endl;
 	
 	}  else if ((argv[1][0] == '-') && (argv[1][1] == '1') && (strlen(argv[1]) == 2))  {
 		// We want to wait for all programs to finish before continuing
@@ -173,6 +176,9 @@ void childcontroller(
 				count = false;
 
 			}
+      if (status == 134)  {
+        continue;
+      }
 			std::cout << "process (" << pid << "): exited (status = " << status
 			<< ')' << std::endl;
 		};
