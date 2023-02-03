@@ -33,5 +33,5 @@ a1p3.o: a1p3.cpp
 # For cleaning
 .PHONY: clean
 clean:
-	rm -f a1p3 do_work *.o
+	rm -f a1p3 do_work *.o out*
 

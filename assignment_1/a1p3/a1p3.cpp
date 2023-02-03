@@ -35,17 +35,19 @@ unsigned int getlines(std::string buffers[])  {
 	unsigned int linecount = 0;
 	std::string buffer;
 
+	std::cout << std::endl;
+
 	// Simply get all the line from the input stream
 	while (getline(std::cin, buffers[linecount], '\n'))  {
 		// We do not want to read comments and empty lines
 		if ( (buffers[linecount][0] == '#') || (buffers[linecount].size() == 0) )  {
 			continue;
 		}
-
+		std::cout << "print cmd(): [" << buffers[linecount] << ']' << std::endl;
 		// Update the index
 		linecount++;
 	};
-	std::cout << "We have taken all the inputs" << std::endl;
+	std::cout << std::endl;
 	
 	return linecount;
 };
@@ -90,11 +92,11 @@ unsigned int gettokens(std::string &cmdline, tokens &tok)  {
 	return count;
 };
 
-void runline(std::string &cmdline)  {
+void runline(std::string &cmdline, pid_t &pids, unsigned int &k)  {
 	/*
 	This function will run the cmdline given by the input
 	*/
-	//TODO This stupid function
+	
 	pid_t pid = fork();
 	if (pid < 0)  {
 		std::cout << "Forking failed" << std::endl;
@@ -103,35 +105,104 @@ void runline(std::string &cmdline)  {
 	}  else if (pid == 0)  {
 		// This is the child process
 		tokens toks;
-		 unsigned int count = gettokens(cmdline, toks);
-		 // We need to convert the type to something that execvp can read
+		unsigned int count = gettokens(cmdline, toks);
+		// We need to convert the type to something that execvp can read
 		 char * args[MAX_NTOKEN + 1];
-		 for (int i = 0; i < MAX_NTOKEN + 1; i++)  {
+		 for (unsigned int i = 0; i < count; i++)  {
 			 // Transfer the tokens from the struct to this one
 			 args[i] = toks.token[i];
 		 };
-		 args[MAX_NTOKEN + 1] = NULL;
-		
-		// Now we need to input the characters into execlp
-		char * arglist[] = {"timeout", "3", "./myclock", "outA", NULL};
+		 args[count] = NULL;
+	
 		execvp(args[0], args);
-		exit(EXIT_SUCCESS);
+		
+		// For failed exec outputs
+		std::cout << "child (" << getpid()
+		<< "): unable to execute '" << cmdline << "'" << std::endl << std::endl;
+		abort();
+		return;
 	}  else  {
-		// This the is parent process. PID is the child id
-		wait(NULL);
+		// This the is parent process. PID is the child id. Sending it out
+		std::cout << k << " [" << pid << ": '" << cmdline << "']" << std::endl;
+		pids = pid;
+		
+		return;
 	};
 	return;
 };
 
-void childcontroller(std::string *fullinput, unsigned int &lines)  {
+void childcontroller(
+	std::string *fullinput,
+	unsigned int &lines,
+	int argc,
+	char *argv[]
+	)  {
 	// This function will send the command from input to child processes.
-	std::cout << fullinput[0] << std::endl;
-	std::cout << lines << std::endl;
+	std::cout <<"There are " << lines << " lines" << std::endl;
+	pid_t *pids = new pid_t[lines]; int status;
+	pid_t pid; bool count = true;
+
+	std::cout << std::endl;
+	std::cout << "Process table:" << std::endl;
 	for (unsigned int i = 0; i < lines; i++)  {
 		// Running the lines
-		printf("Running line %i\n=============================================\n", i);
-		runline(fullinput[i]);
+				runline(fullinput[i], pids[i], i);
+	};
+	std::cout << std::endl;
+
+			
+	if (argv[1][0] == '0' && (strlen(argv[1]) == 1))  {
+		// This option makes us go straight to step 5
+		std::cout << "The argument was 0" << std::endl;
+		
+	}  else if ((argv[1][0] == '1') && (strlen(argv[1]) == 1))  {
+		// We want to wait for exactly 1 child to return before continuing
+		std::cout << "Waiting for one child process" << std::endl;
+		waitpid(-1, &status, 0);
+	
+	}  else if ((argv[1][0] == '-') && (argv[1][1] == '1') && (strlen(argv[1]) == 2))  {
+		// We want to wait for all programs to finish before continuing
+		std::cout << "Waiting for all child to complete" << std::endl;
+		// Need to cite the stack overflow code for this bit
+		std::cout << std::endl;
+		while ((pid = waitpid(-1, &status, 0)) != -1)  {
+			// We are simply looping until all the processes are done
+			if (count)  {
+				// Print a newline to separate the output
+				std::cout << std::endl;
+				count = false;
+
+			}
+			std::cout << "process (" << pid << "): exited (status = " << status
+			<< ')' << std::endl;
+		};
+	
+	}  else  {
+		// More error handling
+		std::cout << "Command-line argument not detected" << std::endl;
+		std::cout << "Please try again with proper arguments" << std::endl;
+		exit(EXIT_SUCCESS);
 	}
+
+	
+	return;
+}
+
+//=============================================================================
+// Part 6 output print function
+void timeprint(
+	clock_t &time1,
+	clock_t &time2,
+	struct tms &cpu1,
+	struct tms &cpu2)  {
+	// This function will try to print to format of figure 8.31
+	static long clktck = 0;
+	if (clktck == 0)  {
+		clktck=sysconf(_SC_CLK_TCK);
+	}
+	float final_time = (time2 - time1) / clktck;
+	std::cout << final_time << std::endl;
+
 	return;
 }
 
@@ -143,10 +214,8 @@ int main(int argc, char *argv[])  {
 
 //=============================================================================
 	// Declaring for times(). Both the starting and ending times.
-	long clktck=sysconf(_SC_CLK_TCK);
 	clock_t time1, time2;
 	struct tms cpu1; struct tms cpu2;
-	std::string test = "timeout 3 ./myclock outA";
 
 	// The initial time
 	time1 = times(&cpu1);
@@ -158,23 +227,16 @@ int main(int argc, char *argv[])  {
 
 //=============================================================================
 	// Trying to execute the programs in the inputs
-	childcontroller(intermediateStr, lines);
+	childcontroller(intermediateStr, lines, argc, argv);
 
 //=============================================================================
+	// Step 5, Calling time again
+	time2 = times(&cpu2);
 
-	if (argv[1][0] == '0' && (strlen(argv[1]) == 1))  {
-		std::cout << "The argument was 0" << std::endl;
-		return 0;
-	}  else if ((argv[1][0] == '1') && (strlen(argv[1]) == 1))  {
-		std::cout << "was 1" << std::endl;
-		return 0;
-	}  else if ((argv[1][0] == '-') && (argv[1][1] == '1') && (strlen(argv[1]) == 2))  {
-		std::cout << "neg 1" << std::endl;
-		return 0;
-	}  else  {
-		// More error handling
-		std::cout << "Command-line argument not detected" << std::endl;
-	}
+//=============================================================================
+	// Step 6 - Getting the output to match the figure
+	timeprint(time1, time2, cpu1, cpu2);
+		
 	return 0;
 }
 
