@@ -1,4 +1,5 @@
 ///////////////////////////////////////////////////////////////////////////////
+
 Credentials:
 	Name: Waridh "Bach" Wongwandanee
 	CCID: waridh
@@ -20,6 +21,30 @@ Make targets:
 
 	do_work:	Compiles the do_work.c test program.
 
+	a1p2s:	Runs the command './a1p2 s', which is the standby mode of the part 2
+					program. It will wait for two minutes before killing myclock.
+
+	a1p2w:	Runs the './a1p2 w' command, which is the wait mode of the part 2
+					command. This command will make the parent process wait until the
+					myclock child process terminates before continuing.
+
+	a1p30:	Runs the './a1p3 0 < a1p3.data2' command, which will run the part 3
+					program with the argument that makes it not wait for any child
+					processes to complete. The Makefile will run the custom test case
+					requested in the assignment that takes at least five seconds to run.
+
+	a1p31:	Runs the './a1p3 1 < a1p3.data2' command. This will run part 3 with
+					the argument that makes the program wait for one child process to
+					complete before it continues. Takes input from the a1p3.data2 custom
+					input file rquired by the assignment
+
+	a1p3neg:	Runs the './a1p3 -1 < a1p3.data2' command. This will run part 3
+						with the argument specifying that the program must wait for all
+						child processes to complete before moving on. Uses the custom
+						test input required by the assignment.
+
+	tar:	Creates a tarball with the content of the folder inside it.
+
 	clean:	The clean target will get rid of all intermediary objects, test files
 					, executables, and outputs. Run it often
 
@@ -32,6 +57,53 @@ Files:
 	do_work.c:	The test program given in eclass. Used to run heavier load
 							processes. It's involved in the custom test case required as a
 							deliverable
+
+	a1p3.data:	This file contains the example test given on eclass in the second
+							pdf. This is included in case users want to test those commands.
+
+	a1p3.data2:	This file is the custom student made test file required by the
+							first pdf. All the tasks in this test file takes at least 5 real
+							seconds, and they were ran on the lab machine and the CPU time
+							was analysed in the typeset pdf file.
+
+	a1typeset.pdf:	This file is the typeset that answers the question from the
+									assignment.
+
+	Makefile:	The Makefile. Automates compilation and running of the programs.
+
+	myclock:	A testing program provided on eclass. Outputs the system time to
+						the file named in the first argument.
+
+
+Usage:
+	a1p2:	./a1p2 (w|s)
+				Where w will make the program wait for its child process to terminate
+				before moving forwards. The s argument will kill its child process
+				after the parent program sleeps for two minutes.
+
+	a1p3:	./a1p3 (-1|0|1) < inputFile
+				This program runs the requirements given in part 3 of the assignment.
+				The first argument that is either -1, 0, or 1 will cause the program
+				the either wait for all child processes to finish, not wait for any,
+				or wait for exactly one respectively. The program takes inputs from a
+				generic text file through standard input.
+
+	do_work:	./do_work inputFile maxIter
+						This program was retrieved from eclass, and is used to make the cpu
+						time run. The inputFile should be a large text file, and the
+						maxIter is the maximum amount of iterations that the program can
+						run. The higher the input maxIter, the more CPU time that the
+						program will potentially use.
+
+	myclock:	./myclock outFile
+						This executable was gathered from eclass and it outputs the current
+						system time every two seconds to the outFile. In some of the test,
+						this file may need to be added to PATH.
+
+	PATH:	Please add the current directory to path. You can do this by adding the
+				'PATH=$PATH\:.' to '~/.bashrc'. Then type in 'source ~/.bashrc' into
+				the command line. Now both myclock and do_work should be executables
+				without the need for './'
 
 ///////////////////////////////////////////////////////////////////////////////
 

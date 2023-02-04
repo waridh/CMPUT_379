@@ -4,8 +4,8 @@
 timeout 5 ./myclock out2
 
 timeout 5 ./myclock out3
-timeout 5 do_work bash.man 100
+timeout 5 do_work bash.man 200
 
-timeout 5 do_work bash.man 50
+timeout 5 do_work bash.man 300
 
 timeout 5 do_work bash.man 1000

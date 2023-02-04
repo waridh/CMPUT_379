@@ -6,15 +6,22 @@ C_FLAGS = -std=c++11 -g -Wall
 # The top command is to compile the program and assign an alias for it
 all: a1p3 do_work bash.man a1p2
 
+# Running assignment 1 part 2
+a1p2w: a1p2
+	./a1p2 w
+
+a1p2s: a1p2
+	./a1p2 s
+
 # Quick running the program
-a1p30: all
-	./a1p3 0 < a1p3.data
+a1p30: a1p3 do_work bash.man
+	./a1p3 0 < a1p3.data2
 
-a1p31: all
-	./a1p3 1 < a1p3.data
+a1p31: a1p3 do_work bash.man
+	./a1p3 1 < a1p3.data2
 
-a1p3neg: all
-	./a1p3 -1 < a1p3.data
+a1p3neg: a1p3 do_work bash.man
+	./a1p3 -1 < a1p3.data2
 
 # Making the do_work executable for testing
 do_work: do_work.o
@@ -27,7 +34,7 @@ do_work.o: do_work.c
 bash.man:
 	man bash > bash.man
 # Simply turning the object into an executable
-a1p3: a1p3.o
+a1p3: a1p3.o bash.man do_work
 	$(CC) -o $@ $<
 
 # Creating the C++ object
@@ -42,8 +49,12 @@ a1p2: a1p2.o
 a1p2.o: a1p2.cpp
 	$(CC) $(C_FLAGS) -c $<
 
+# Making a tarball
+tar: clean
+	tar -czvf wongwandanee-a1.tar.gz *
+
 # For cleaning
 .PHONY: clean
 clean:
-	rm -f a1p3 do_work *.o out* bash.man
+	rm -f a1p2 a1p3 do_work *.o out* bash.man wongwandanee-a1.tar.gz
 

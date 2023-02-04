@@ -3,9 +3,10 @@
 #include <csignal>
 #include <cstdlib>
 #include <iostream>
+#include <map>
 #include <string>
 #include <sys/times.h>
- #include <sys/wait.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define MAXLINE 128		// Max # of characters in an input line
@@ -47,6 +48,10 @@ unsigned int getlines(std::string buffers[])  {
 		std::cout << " print_cmd(): [" << buffers[linecount] << ']' << std::endl;
 		// Update the index
 		linecount++;
+		if (linecount == NPROC)  {
+			// We only want to take the lines specified in the rubric (5 lines)
+			break;
+		}
 	};
 	std::cout << std::endl;
 	
@@ -146,12 +151,14 @@ void childcontroller(
 	// Allocating memory to pids array + other initialization
 	pid_t *pids = new pid_t[lines]; int status;
 	pid_t pid; bool count = true;
+	std::map<pid_t, std::string> cmdmap; 
 
 	std::cout << std::endl;
 	std::cout << "Process table:" << std::endl;
 	for (unsigned int i = 0; i < lines; i++)  {
 		// Running the lines
 		runline(fullinput[i], pids[i], i);
+		cmdmap[pids[i]] = fullinput[i];
 	};
 	std::cout << std::endl;
 
@@ -176,24 +183,22 @@ void childcontroller(
 		std::cout << "Waiting for all child processes to complete" << std::endl;
 		// Need to cite the stack overflow code for this bit
 		std::cout << std::endl;
-		/* This while loop for waiting for all child process to run was grabbed
-		from stack overflow. The link is: https://stackoverflow.com/questions/35722
-		491/parent-process-waits-for-all-child-processes-to-finish-before-continuin
-		g*/
+		/* This while loop for waiting for all child process to run*/
 		while ((pid = waitpid(-1, &status, 0)) != -1)  {
 			// We are simply looping until all the processes are done
+			
+			// Not outputting this because it means that the program did not execute
+      if ((status == 134) || (status == 6))  {
+        continue;
+      }
 			if (count)  {
 				// Print a newline to separate the output
 				std::cout << std::endl;
 				count = false;
 
 			}
-			// Not outputting this because it means that the program did not execute
-      if (status == 134)  {
-        continue;
-      }
-			std::cout << "process (" << pid << "): exited (status = " << status
-			<< ')' << std::endl;
+			std::cout << "process (" << pid << ": '" << cmdmap[pid]
+			<< "'): exited (status = " << status << ')' << std::endl;
 		};
 	
 	}  else  {
