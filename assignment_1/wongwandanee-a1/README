@@ -1,0 +1,37 @@
+///////////////////////////////////////////////////////////////////////////////
+Credentials:
+	Name: Waridh "Bach" Wongwandanee
+	CCID: waridh
+	SID: 1603722
+
+Make targets:
+	a1p2:	The target will generate the executable for assignment 1 part 2. You
+				will want to run the executable afterwards using './'.
+	
+	a1p3:	This target will generate the execuatble for assignment 1 part 3. Same
+				things apply as part 2.
+
+	all:	Runs by default if you call make. This will compile all programs into
+				executables. Including the test programs like do_work.c. It will also
+				create the test file bash.man given in the example pdf.
+	
+	bash.man:	Creates the test input file from the unix bash manual. Needed for
+						my custom test with at least 5 seconds real runtime input.
+
+	do_work:	Compiles the do_work.c test program.
+
+	clean:	The clean target will get rid of all intermediary objects, test files
+					, executables, and outputs. Run it often
+
+
+Files:
+	a1p2.cpp:	The code for assignment 1 part 2. Needs to be compiled.
+
+	a1p3.cpp:	The code for assignment 1 part 3. Needs to be compiled.
+
+	do_work.c:	The test program given in eclass. Used to run heavier load
+							processes. It's involved in the custom test case required as a
+							deliverable
+
+///////////////////////////////////////////////////////////////////////////////
+

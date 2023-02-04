@@ -4,7 +4,7 @@ C_FLAGS = -std=c++11 -g -Wall
 #C_FLAGS2 = -std=c99 -Wall
 
 # The top command is to compile the program and assign an alias for it
-all: a1p3 do_work bash.man
+all: a1p3 do_work bash.man a1p2
 
 # Quick running the program
 a1p30: all
@@ -32,6 +32,14 @@ a1p3: a1p3.o
 
 # Creating the C++ object
 a1p3.o: a1p3.cpp
+	$(CC) $(C_FLAGS) -c $<
+
+# Turning the a1p2 code into an executable
+a1p2: a1p2.o
+	$(CC) -o $@ $<
+
+# a1p2 object
+a1p2.o: a1p2.cpp
 	$(CC) $(C_FLAGS) -c $<
 
 # For cleaning
