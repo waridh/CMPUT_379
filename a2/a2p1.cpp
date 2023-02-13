@@ -1,6 +1,8 @@
+#include <fstream>
 #include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 
 //=============================================================================
 // Error outputs
@@ -34,13 +36,13 @@ void disp_arg(char * argv[])  {
   << argv[2] << "', delay= " << argv[3] << ")" << std::endl;
 };
 
-void readLine(FILE * fp, int i)  {
+void readLine(std::ifstream &fp, int i)  {
   /* This function just outputs a single line read from the file*/
-  char * line = NULL;
+  std::string line;
   char indicator[] = "0000";
   size_t len = 0;
   ssize_t read;
-  read = getline(&line, &len, fp);
+  read = getline(fp, line, '\n');
   sprintf(indicator, "%04d", i); 
   std::cout << "[" << indicator << "]: '" << line << "'" << std::endl;
   
@@ -48,12 +50,15 @@ void readLine(FILE * fp, int i)  {
 
 void lineout_controller(char * inFile, int * nLine)  {
   /* This function attempts to control the line output*/
-  FILE * fp = fopen(inFile, "r");
-  if (fp == NULL)  {
-    print_file_error();
+  std::ifstream  fp;
+  int           i, count = 1;
+  fp.open(inFile);
+  if (fp.is_open())  {
+    for (i = 0; i < *nLine; i++)  {
+    readLine(fp, count);
+    count++;
+    }
   };
-
-  readLine(fp, 1); 
 };
 
 int main(int argc, char * argv[])  {
