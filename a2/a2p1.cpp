@@ -1,8 +1,9 @@
 #include <fstream>
 #include <iostream>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string>
+#include <string.h>
 
 //=============================================================================
 // Error outputs
@@ -40,9 +41,7 @@ void readLine(std::ifstream &fp, int i)  {
   /* This function just outputs a single line read from the file*/
   std::string line;
   char indicator[] = "0000";
-  size_t len = 0;
-  ssize_t read;
-  read = getline(fp, line, '\n');
+  std::getline(fp, line);
   sprintf(indicator, "%04d", i); 
   std::cout << "[" << indicator << "]: '" << line << "'" << std::endl;
   
@@ -50,15 +49,20 @@ void readLine(std::ifstream &fp, int i)  {
 
 void lineout_controller(char * inFile, int * nLine)  {
   /* This function attempts to control the line output*/
-  std::ifstream  fp;
+  /* TODO:
+        Need to figure out how we want to close the file*/
+  std::ifstream  fp(inFile);
   int           i, count = 1;
-  fp.open(inFile);
   if (fp.is_open())  {
     for (i = 0; i < *nLine; i++)  {
     readLine(fp, count);
     count++;
     }
   };
+};
+
+void thread_controller(char * inFile, int * nLine, int * delay)  {
+  return;
 };
 
 int main(int argc, char * argv[])  {
