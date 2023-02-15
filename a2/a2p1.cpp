@@ -1,10 +1,15 @@
 #include <fstream>
 #include <iostream>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
+//=============================================================================
+// Definitions
+#define STDIN 0
 
 //=============================================================================
 // Structures
@@ -56,46 +61,67 @@ void readLine(std::ifstream &fp, int i)  {
   
 };
 
+// void * cmd_controller(void * arg)  {
+//   /* This function loops and calls the command line argument*/
+//   int *     signaler = (int *) arg;
+//   while  (signaler == 0)  {
 
+//   }
+//   return NULL;
+// }
+void sig_func(int sig)  {
+  // Signal handler
+  std::cin.setstate(std::cin.eofbit);
+  signal(SIGQUIT, sig_func);
+}
 
-
-void * cmdline_controller(void * input_args)  {
+void * cmdline_controller(void * arg)  {
   /* This function attempts to control the line output*/
   /* TODO:
         Need to figure out how we want to close the file*/
-  int *           signaler = (int *) input_args;
-  int             err, i, count = 1;
+  int *           signaler = (int *) arg;
+	fd_set          fds;
+  int             err, i, retval, count = 1;
   std::cout << "User command:" << std::endl;
-  std::string line;
-  while (1)  {
-    getline(std::cin, line);
-    // Exit command
-    if (line == "quit")  {
-      // Creating the thread
-      exit(EXIT_SUCCESS);
-    
-    }
-    // Getting input lines from user standard in
-    std::cout << line << std::endl;
-  }
+  char line[100] = {0};
 
-  return NULL;
+  while (*signaler == 0)  {
+		FD_ZERO(&fds);
+		FD_SET(STDIN_FILENO, &fds);
+		retval = select(STDIN_FILENO+1, &fds, NULL, NULL, NULL);
+
+		if (FD_ISSET(STDIN_FILENO, &fds))  {
+			// If we catch an input
+			if (fgets(line, 100, stdin))  {
+				std::cout << line;
+				if (strncmp(line, "quit", 4) == 0)  {
+					exit(EXIT_SUCCESS);
+				}
+			}
+		}
+  }
+  pthread_exit(NULL);
 };
 
 void thread_controller(super_struct arguments)  {
-  /* This function creates and controls thread that will run the line out and
-  the command line input*/ 
-  int             err;
-  int             i;
-  int             count = 1;
-  int             signaler = 0;
-  pthread_t       tid1;
-  pthread_attr_t  attr1;
-  std::ifstream   fp(arguments.inFile);
-  std::string     line;
-  void*           tret;
-  // Setting the default attribute of the thread
-  pthread_attr_init(&attr1);
+	/* This function creates and controls thread that will run the line out and
+	the command line input*/
+	
+	int             err;
+	int             i;
+	int             count = 1;
+	int             signaler = 0;
+	pthread_t       tid1;
+	pthread_attr_t  attr1;
+	std::ifstream   fp(arguments.inFile);
+	std::string     line;
+	void*           tret;
+	// Setting the default attribute of the thread
+	pthread_attr_init(&attr1);
+
+	
+
+  signal(SIGQUIT, sig_func);
   // Running open check
   if (!fp.is_open())  {
     print_file_error();
@@ -114,24 +140,28 @@ void thread_controller(super_struct arguments)  {
     std::cout << std::endl << "*** Entering a delay period of "
     << arguments.delay << "msec" << std::endl << std::endl;
     
-
     // Creating the thread
+    signaler = 0;
     err = pthread_create(
       &tid1,
       &attr1,
       cmdline_controller,
       (void *) &signaler);
+
     if (err != 0)  {
       std::cout << "Unable to create thread" << std::endl;
       exit(EXIT_FAILURE);
     };
-    pthread_detach(tid1);
+    // pthread_detach(tid1);
     usleep(arguments.delay*1000);
-    pthread_cancel(tid1);
-    std::cout << "*** Delay period ended" << std::endl;
-    if (signaler == -1)  {
-      exit(EXIT_SUCCESS);
-    }
+    signaler = -1;
+    pthread_kill(tid1, SIGQUIT);
+    pthread_join(tid1, NULL);
+    // std::cout << "*** Delay period ended" << std::endl;
+    // if (signaler == -1)  {
+    //   exit(EXIT_SUCCESS);
+    // }
+    
   };
 
   

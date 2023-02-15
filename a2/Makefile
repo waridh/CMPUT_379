@@ -13,7 +13,7 @@ a2p1test: a2p1 fmt.man
 
 # Compiles the part 1 program
 a2p1: a2p1.o
-	$(CC) -o $@ $<
+	$(CC) -pthread -o $@ $<
 
 a2p1.o: a2p1.cpp
 	$(CC) $(C_FLAGS) -c $<
