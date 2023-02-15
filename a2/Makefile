@@ -18,6 +18,12 @@ a2p1: a2p1.o
 a2p1.o: a2p1.cpp
 	$(CC) $(C_FLAGS) -c $<
 
+a2p2: a2p2.o
+	$(CC) -pthread -o $@ $<
+
+a2p2.o: a2p2.cpp
+	$(CC) $(C_FLAGS) -c $<
+
 fmt.man:
 	man fmt | fmt -60 > $@
 
@@ -28,4 +34,4 @@ tar: clean
 # For cleaning
 .PHONY: clean
 clean:
-	rm -f *.o fmt.man a2p1
+	rm -f *.o fmt.man a2p1 a2p2
