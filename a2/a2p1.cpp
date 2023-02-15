@@ -61,44 +61,51 @@ void readLine(std::ifstream &fp, int i)  {
   
 };
 
-// void * cmd_controller(void * arg)  {
-//   /* This function loops and calls the command line argument*/
-//   int *     signaler = (int *) arg;
-//   while  (signaler == 0)  {
-
-//   }
-//   return NULL;
-// }
 void sig_func(int sig)  {
   // Signal handler
-  std::cin.setstate(std::cin.eofbit);
+	std::cout << std::endl;
+  pthread_exit(NULL);
   signal(SIGQUIT, sig_func);
+}
+
+void * program_run(void * arg)  {
+	char *					line = (char *) arg;
+	FILE *					program_sig;
+	program_sig = popen(line, "w");
+	pclose(program_sig);
+	pthread_exit(NULL);
 }
 
 void * cmdline_controller(void * arg)  {
   /* This function attempts to control the line output*/
   /* TODO:
         Need to figure out how we want to close the file*/
-  int *           signaler = (int *) arg;
 	fd_set          fds;
-	FILE *					program_sig;
-  int             err, i, retval, count = 1;
-  std::cout << "User command:" << std::endl;
+	int 						retval;
+	pthread_t				tid;
   char line[1024] = {0};
-
-  while (*signaler == 0)  {
+	printf("User command: "); fflush(stdout);
+  while (1)  {
 		FD_ZERO(&fds);
 		FD_SET(STDIN_FILENO, &fds);
-		retval = select(STDIN_FILENO+1, &fds, NULL, NULL, NULL);
+		select(STDIN_FILENO+1, &fds, NULL, NULL, NULL);
 
 		if (FD_ISSET(STDIN_FILENO, &fds))  {
 			// If we catch an input
 			if (fgets(line, 1024, stdin))  {
 				if (strncmp(line, "quit", 4) == 0)  {
 					exit(EXIT_SUCCESS);
+				}
+				retval = pthread_create(
+					&tid,
+					NULL,
+					program_run,
+					(void *) &line
+				);
+				if (retval != 0)  {
+					std::cout << "Unable to create command line thread" << std::endl;
 				}  else  {
-					program_sig = popen(line, "w");
-					pclose(program_sig);
+					pthread_detach(tid);
 				}
 			}
 		}
@@ -118,7 +125,6 @@ void thread_controller(super_struct arguments)  {
 	pthread_attr_t  attr1;
 	std::ifstream   fp(arguments.inFile);
 	std::string     line;
-	void*           tret;
 	// Setting the default attribute of the thread
 	pthread_attr_init(&attr1);
 
@@ -141,7 +147,7 @@ void thread_controller(super_struct arguments)  {
     }
 
     std::cout << std::endl << "*** Entering a delay period of "
-    << arguments.delay << "msec" << std::endl << std::endl;
+    << arguments.delay << " msec" << std::endl << std::endl;
     
     // Creating the thread
     signaler = 0;
@@ -160,10 +166,8 @@ void thread_controller(super_struct arguments)  {
     signaler = -1;
     pthread_kill(tid1, SIGQUIT);
     pthread_join(tid1, NULL);
-    // std::cout << "*** Delay period ended" << std::endl;
-    // if (signaler == -1)  {
-    //   exit(EXIT_SUCCESS);
-    // }
+
+    std::cout << "*** Delay period ended" << std::endl << std::endl;
     
   };
 
