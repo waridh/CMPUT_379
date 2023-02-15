@@ -56,28 +56,43 @@ void readLine(std::ifstream &fp, int i)  {
   
 };
 
-void * lineout_controller(void * input_args)  {
+
+
+
+void * cmdline_controller(void * input_args)  {
   /* This function attempts to control the line output*/
   /* TODO:
         Need to figure out how we want to close the file*/
-
-  super_struct * arguments = (super_struct *) input_args;
-  std::ifstream  fp(arguments -> inFile);
-  int           i, count = 1;
+  int *           signaler = (int *) input_args;
+  int             err, i, count = 1;
   std::cout << "User command:" << std::endl;
-  sleep(5);
+  std::string line;
+  while (1)  {
+    getline(std::cin, line);
+    // Exit command
+    if (line == "quit")  {
+      // Creating the thread
+      exit(EXIT_SUCCESS);
+    
+    }
+    // Getting input lines from user standard in
+    std::cout << line << std::endl;
+  }
 
   return NULL;
 };
 
 void thread_controller(super_struct arguments)  {
   /* This function creates and controls thread that will run the line out and
-  the command line input*/
+  the command line input*/ 
+  int             err;
+  int             i;
+  int             count = 1;
+  int             signaler = 0;
   pthread_t       tid1;
   pthread_attr_t  attr1;
-  int             err;
-  int             i, count = 1;
   std::ifstream   fp(arguments.inFile);
+  std::string     line;
   void*           tret;
   // Setting the default attribute of the thread
   pthread_attr_init(&attr1);
@@ -91,25 +106,32 @@ void thread_controller(super_struct arguments)  {
       if (fp.eof())  {
         break;
       }
-    readLine(fp, count);
-    count++;
+      readLine(fp, count);
+      count++;
 
     }
 
     std::cout << std::endl << "*** Entering a delay period of "
     << arguments.delay << "msec" << std::endl << std::endl;
+    
 
     // Creating the thread
     err = pthread_create(
       &tid1,
       &attr1,
-      lineout_controller,
-      (void *) &arguments);
+      cmdline_controller,
+      (void *) &signaler);
     if (err != 0)  {
       std::cout << "Unable to create thread" << std::endl;
       exit(EXIT_FAILURE);
+    };
+    pthread_detach(tid1);
+    usleep(arguments.delay*1000);
+    pthread_cancel(tid1);
+    std::cout << "*** Delay period ended" << std::endl;
+    if (signaler == -1)  {
+      exit(EXIT_SUCCESS);
     }
-    err = pthread_join(tid1, &tret);
   };
 
   
