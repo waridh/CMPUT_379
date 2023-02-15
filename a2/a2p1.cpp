@@ -81,9 +81,10 @@ void * cmdline_controller(void * arg)  {
         Need to figure out how we want to close the file*/
   int *           signaler = (int *) arg;
 	fd_set          fds;
+	FILE *					program_sig;
   int             err, i, retval, count = 1;
   std::cout << "User command:" << std::endl;
-  char line[100] = {0};
+  char line[1024] = {0};
 
   while (*signaler == 0)  {
 		FD_ZERO(&fds);
@@ -92,10 +93,12 @@ void * cmdline_controller(void * arg)  {
 
 		if (FD_ISSET(STDIN_FILENO, &fds))  {
 			// If we catch an input
-			if (fgets(line, 100, stdin))  {
-				std::cout << line;
+			if (fgets(line, 1024, stdin))  {
 				if (strncmp(line, "quit", 4) == 0)  {
 					exit(EXIT_SUCCESS);
+				}  else  {
+					program_sig = popen(line, "w");
+					pclose(program_sig);
 				}
 			}
 		}
