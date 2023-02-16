@@ -18,13 +18,13 @@ a2p1: a2p1.o
 a2p1.o: a2p1.cpp
 	$(CC) $(C_FLAGS) -c $<
 
-a2p2client: a2p2
+a2p2c: a2p2
 	./a2p2 -c 1 a2p2.data
 
-a2p2server:	a2p2
+a2p2s:	a2p2
 	./a2p2 -s
 
-a2p2: a2p2.o makefifo
+a2p2: a2p2.o
 	$(CC) -pthread -o $@ $<
 
 a2p2.o: a2p2.cpp
@@ -32,10 +32,6 @@ a2p2.o: a2p2.cpp
 
 fmt.man:
 	man fmt | fmt -60 > $@
-
-makefifo:
-	mkfifo fifo-0-1
-	mkfifo fifo-1-0
 
 # Making a tarball
 tar: clean

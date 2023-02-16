@@ -1,5 +1,7 @@
 #include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #define 	NCLIENT = 3;
@@ -15,7 +17,29 @@ void * cmd_arg_err()  {
 	exit(EXIT_FAILURE);
 }
 
+//===============================================================================
+// Utilities
+
+
+
+//===============================================================================
+// Submain/loops
+
+void * client_cmd_send(std::fstream * fp, char * c2s_fifo)  {
+	/* This function uses the io stream to send cmd lines to the server*/
+	std::string line;
+	while (std::getline(*fp, line))  {
+		// Loop for grabbing cmd lines from the client file
+		if (line[0] == '#')  {
+			// Skipping if it's a comment
+			continue;
+		}
+		std::cout << line << std::endl;
+	}
+}
+
 //=============================================================================
+// Main functions
 void * server_main()  {
 	// This function will serve as the main function for the server
 
@@ -26,10 +50,19 @@ void * server_main()  {
 };
 
 void * client_main(int idNumber, char * inputFile)  {
+	// Variable initialization
+	char 					c2s_fifo[10];
+	std::fstream	fp(inputFile);
 	// This function will serve as the main function for the client
 	std::cout << "Running the client" << std::endl;
-	std::cout << idNumber << std::endl;
-	std::cout << inputFile << std::endl;
+
+	// Need to create the fifo name
+	sprintf(c2s_fifo, "fifo-0-%d", idNumber);
+	std::cout << c2s_fifo << std::endl;
+	// Making the fifo file
+	mkfifo(c2s_fifo, 0666);
+	client_cmd_send(&fp, c2s_fifo);
+
 	return NULL;
 }
 
