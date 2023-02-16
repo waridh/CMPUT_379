@@ -30,8 +30,8 @@ void * client_cmd_send(std::fstream * fp, char * c2s_fifo)  {
 	std::string line;
 	while (std::getline(*fp, line))  {
 		// Loop for grabbing cmd lines from the client file
-		if (line[0] == '#')  {
-			// Skipping if it's a comment
+		if ((line[0] == '#') || (line[0] == '\n') || (line.size() == 0))  {
+			// Skipping if it's a comment, or line is empty
 			continue;
 		}
 		std::cout << line << std::endl;
