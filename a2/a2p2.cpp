@@ -1,6 +1,8 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -27,7 +29,11 @@ void * cmd_arg_err()  {
 
 void * client_cmd_send(std::fstream * fp, char * c2s_fifo)  {
 	/* This function uses the io stream to send cmd lines to the server*/
+	int fd;
 	std::string line;
+	
+	fd = open(c2s_fifo, O_WRONLY);
+
 	while (std::getline(*fp, line))  {
 		// Loop for grabbing cmd lines from the client file
 		if ((line[0] == '#') || (line[0] == '\n') || (line.size() == 0))  {
@@ -36,6 +42,7 @@ void * client_cmd_send(std::fstream * fp, char * c2s_fifo)  {
 		}
 		std::cout << line << std::endl;
 	}
+	close(fd);
 }
 
 //=============================================================================
