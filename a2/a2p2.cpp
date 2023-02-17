@@ -15,9 +15,16 @@
 
 typedef struct  {
 	// Struct for the send thread
-	char * inFile;
-	char * c2s_fifo;
+	char * 				inFile;
+	char * 				c2s_fifo;
+	int						cid;
 } csend_t;
+
+typedef struct  {
+	// For writing to fifo
+	char * 				fifo_n;
+	std::string		line;
+} wfifo_t;
 
 //=============================================================================
 // Error handling
@@ -36,9 +43,22 @@ void thread_create_fail()  {
 	exit(EXIT_FAILURE);
 }
 
+void fifo_open_fail()  {
+	std::cout << "Failed to open the fifo" << std::endl;
+	exit(EXIT_FAILURE);
+}
+
 //=============================================================================
 // Utilities
-
+void * fifo_write(void * arg)  {
+	/* This function uses threads to write to fifo*/
+	wfifo_t *					wfifo = (wfifo_t *) arg;
+	int								fd;
+	fd = open(wfifo->fifo_n, O_WRONLY | O_NONBLOCK);
+	write(fd, wfifo->line.c_str(), strlen(wfifo->line.c_str()) + 1);
+	close(fd);
+	pthread_exit(NULL);
+}
 
 
 //=============================================================================
@@ -47,24 +67,46 @@ void thread_create_fail()  {
 void * client_cmd_send(void * arg)  {
 	/* This function uses the io stream to send cmd lines to the server*/
 	csend_t *				csend = (csend_t *) arg;
-
 	int 						fd;
 	std::fstream		fp(csend->inFile);
 	std::string 		line;
-	std::cout << "Got into thread" << std::endl;	
-	std::cout << csend->inFile << std::endl;
+	wfifo_t					wfifo;
+	fd = open(csend->c2s_fifo, O_WRONLY | O_NONBLOCK);
 
-	//fd = open(c2s_fifo, O_WRONLY);
-
+	wfifo.fifo_n = csend->c2s_fifo;
 	while (std::getline(fp, line))  {
 		// Loop for grabbing cmd lines from the client file
 		if ((line[0] == '#') || (line[0] == '\n') || (line.size() == 0))  {
 			// Skipping if it's a comment, or line is empty
 			continue;
 		}
+		// Debugging	
 		std::cout << line << std::endl;
+		wfifo.line = line;
+		// line_s = line.c_str();
+		// Writing the line to fifo
+		write(fd, line.c_str(), strlen(line.c_str()) + 1);
+		std::cout << "SENT TO PIPE" << std::endl;
 	}
-	//close(fd);
+	close(fd);
+	sleep(1);
+	pthread_exit(NULL);
+}
+
+void * client_reciever(void * arg)  {
+	/* This function will be used with a thread to take inputs*/
+	csend_t *					crecieve = (csend_t *) arg;
+	int								fd;
+
+	fd = open(crecieve->c2s_fifo, O_RDONLY);
+}
+
+void * server_reciever(void * arg)  {
+	/* This thread function will loop and read inputs */
+	while (1) {
+		// Wait for a signal
+
+	}
 }
 
 //=============================================================================
@@ -75,28 +117,37 @@ void server_main()  {
 	// Initilization
 	int					idNumber = 0;
 	std::cout << "Running the server" << std::endl;
+
 	return;
 };
 
 void client_main(int idNumber, char * inputFile)  {
 	// Variable initialization
 	char 						c2s_fifo[10];
+	char						s2c_fifo[10];
 	csend_t					csend;
+	csend_t					crecieve;
 	int							err;
 	pthread_t				tids;
-	std::fstream	fp(inputFile);
+	pthread_t				tidr;
+	std::fstream		fp(inputFile);
 	// This function will serve as the main function for the client
-	std::cout << "Running the client" << std::endl;
+	std::cout << "main: do_client (idNumber = " << idNumber
+	<< ", inputFile = " << inputFile << ")" << std::endl;
 
 	// Need to create the fifo name
 	sprintf(c2s_fifo, "fifo-0-%d", idNumber);
+	sprintf(s2c_fifo, "fifo-%d-0", idNumber);
 	csend.c2s_fifo = c2s_fifo;
-	std::cout << "Making pipe now" << std::endl;
+	crecieve.c2s_fifo = s2c_fifo;
 	// Making the fifo file
 	mkfifo(csend.c2s_fifo, 0666);
+	mkfifo(crecieve.c2s_fifo, 0666);
+	// Fully initialize the struct being sent to the thread
 	csend.inFile = inputFile;
+	csend.cid = idNumber;
 	// Creating thread for sending data to the server
-	std::cout << "About to run the thread" << std::endl;
+	std::cout << "CREATEING THREAD" << std::endl;
 	if (pthread_create(
 		&tids,
 		NULL,
@@ -109,8 +160,7 @@ void client_main(int idNumber, char * inputFile)  {
 
 	pthread_join(tids, NULL);
 
-	// client_cmd_send(&fp, c2s_fifo);
-
+	
 	return;
 }
 
