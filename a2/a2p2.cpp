@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #define 	NCLIENT = 3;
+#define		BUFFERSZ = 1024;
 
 //=============================================================================
 // Structs
@@ -103,10 +104,20 @@ void * client_reciever(void * arg)  {
 
 void * server_reciever(void * arg)  {
 	/* This thread function will loop and read inputs */
+	// Current idea. I will make this thread create a pipe that just takes ints
+	// from clients so that it knows to connect to what pipe.
+	char *					init_fifo = "fifo-to-0";
+	char						buffer[3];
+	int							fd1;
+	mkfifo(init_fifo, 0666);  // Figure out what the number means
+	fd1 = open(init_fifo, O_RDONLY | O_NONBLOCK);
+
 	while (1) {
 		// Wait for a signal
-
+		read(fd1, buffer, 3);
+		std::cout << buffer << std::endl;
 	}
+	close(fd1);
 }
 
 //=============================================================================
@@ -116,7 +127,15 @@ void server_main()  {
 
 	// Initilization
 	int					idNumber = 0;
+	pthread_t		tid1;
 	std::cout << "Running the server" << std::endl;
+
+	pthread_create(
+		&tid1,
+		NULL,
+		server_reciever,
+		NULL
+	);
 
 	return;
 };
