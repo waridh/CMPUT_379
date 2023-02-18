@@ -8,8 +8,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define 	NCLIENT = 3;
-#define		BUFFERSZ = 1024;
+#define 	NCLIENT 					3
+#define		BUFFERSZ 					3
 
 //=============================================================================
 // Structs
@@ -61,6 +61,18 @@ void * fifo_write(void * arg)  {
 	pthread_exit(NULL);
 }
 
+void send_id2s(int idNumber)  {
+	/* The goal of this function is to send the integer cid to the server*/
+	char *					init_fifo = "fifo-to-0";
+	char						idmsg[BUFFERSZ];
+	int							fd;
+	fd = open(init_fifo, O_WRONLY);
+	sprintf(idmsg, "%d", idNumber);
+
+	write(fd, idmsg, BUFFERSZ + 1);	
+
+	close(fd);
+}
 
 //=============================================================================
 // Submain/loops
@@ -107,15 +119,21 @@ void * server_reciever(void * arg)  {
 	// Current idea. I will make this thread create a pipe that just takes ints
 	// from clients so that it knows to connect to what pipe.
 	char *					init_fifo = "fifo-to-0";
-	char						buffer[3];
+	char						buffer[BUFFERSZ];
 	int							fd1;
+	unsigned int		count = 0;
 	mkfifo(init_fifo, 0666);  // Figure out what the number means
-	fd1 = open(init_fifo, O_RDONLY | O_NONBLOCK);
+	fd1 = open(init_fifo, O_RDONLY);
 
 	while (1) {
 		// Wait for a signal
-		read(fd1, buffer, 3);
-		std::cout << buffer << std::endl;
+		read(fd1, buffer, BUFFERSZ);
+		//std::cout << strlen(buffer) << std::endl;
+		if ((strlen(buffer) != 0) && (buffer != "\n"))  {
+			std::cout << buffer << std::endl;
+		}
+		
+		//std::cout << buffer << std::endl;
 	}
 	close(fd1);
 }
@@ -137,12 +155,15 @@ void server_main()  {
 		NULL
 	);
 
+	pthread_join(tid1, NULL);
+
 	return;
 };
 
 void client_main(int idNumber, char * inputFile)  {
 	// Variable initialization
 	char 						c2s_fifo[10];
+	char						id2ser[BUFFERSZ];
 	char						s2c_fifo[10];
 	csend_t					csend;
 	csend_t					crecieve;
@@ -162,6 +183,8 @@ void client_main(int idNumber, char * inputFile)  {
 	// Making the fifo file
 	mkfifo(csend.c2s_fifo, 0666);
 	mkfifo(crecieve.c2s_fifo, 0666);
+	// Connecting to the server
+	send_id2s(idNumber);
 	// Fully initialize the struct being sent to the thread
 	csend.inFile = inputFile;
 	csend.cid = idNumber;
