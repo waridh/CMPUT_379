@@ -126,6 +126,16 @@ void send_id2s(int idNumber)  {
 	close(fd);
 }
 
+void print_transmitted(char * src, char * packet_inf)  {
+	/* This function prints info about the sent packet*/
+	std::cout << "Transmitted (src= " << src << ") " << packet_inf << std::endl;
+}
+
+void print_received(char * src, char * packet_inf)  {
+	/* Prints info about the packet that was recieved*/
+	std::cout << "Received (src= " << src << ") " << packet_inf << std::endl;
+}
+
 //=============================================================================
 // Submain/loops
 
@@ -135,6 +145,8 @@ void * client_cmd_send(void * arg)  {
 	char						buffer[MSGSZ];
 	char						cid[2];
 	char						packet_type[10];
+	char						s2c_fifo[10];
+	char						src_self[10];
 	int 						fd;
 	std::fstream		fp(csend->inFile);
 	std::string 		line;
@@ -142,6 +154,9 @@ void * client_cmd_send(void * arg)  {
 	wfifo_t					wfifo;
 
 	sprintf(cid, "%d", csend->cid);
+	sprintf(src_self, "client:%s", cid);
+	sprintf(s2c_fifo, "fifo-0-%s", cid);
+
 	std::cout << "Connecting to server" << std::endl;
 	std::cout << csend->c2s_fifo << std::endl;
 	fd = open(csend->c2s_fifo, O_WRONLY);
@@ -161,9 +176,35 @@ void * client_cmd_send(void * arg)  {
 		strcpy(buffer, line.c_str());
 		// Switch cases for the file inputs
 		tokenizer(buffer, tokens);
-
-		// Writing the line to fifo
-		write(fd, line.c_str(), MSGSZ);
+		if (strncmp(tokens[1].c_str(), "gtime", 5) == 0)  {
+			strcpy(packet_type, "GTIME");
+			print_transmitted(src_self, packet_type);
+			write(fd, packet_type, MSGSZ);
+		}  else if (strncmp(tokens[1].c_str(), "delay", 5) == 0)  {
+			strcpy(packet_type, "DELAY");
+			write(fd, packet_type, MSGSZ);
+			write(fd, tokens[2].c_str(), MSGSZ);
+			print_transmitted(src_self, packet_type);
+		}  else if (strncmp(tokens[1].c_str(), "put", 3) == 0)  {
+			strcpy(packet_type, "PUT");
+			write(fd, packet_type, MSGSZ);
+			write(fd, tokens[2].c_str(), MSGSZ);
+			print_transmitted(src_self, packet_type);
+		}  else if (strncmp(tokens[1].c_str(), "get", 3) == 0)  {
+			strcpy(packet_type, "GET");
+			write(fd, packet_type, MSGSZ);
+			write(fd, tokens[2].c_str(), MSGSZ);
+			print_transmitted(src_self, packet_type);
+		}  else if (strncmp(tokens[1].c_str(), "delete", 6) == 0)  {
+			strcpy(packet_type, "DELETE");
+			write(fd, packet_type, MSGSZ);
+			write(fd, tokens[2].c_str(), MSGSZ);
+			print_transmitted(src_self, packet_type);
+		}  else if (strncmp(tokens[1].c_str(), "quit", 4) == 0)  {
+			strcpy(packet_type, "QUIT");
+			write(fd, packet_type, MSGSZ);
+		}
+		
 	}
 	std::cout << "GOT OUT OF LOOP" << std::endl;
 	close(fd);
@@ -184,7 +225,7 @@ void * client_reciever(void * arg)  {
 	while (1)  {
 		if (read(fd, buffer, MSGSZ) > 0)  {
 			std::cout << buffer << std::endl;
-			if (strncmp(buffer, "quit", 4) == 0)  {
+			if (strncmp(buffer, "QUIT", 4) == 0)  {
 				std::cout << buffer << std::endl;
 				break;
 			}
@@ -202,6 +243,7 @@ void * server_connect(void * arg)  {
 	char						packet_type[10];
 	char						pipe_in[10];
 	char						pipe_out[10];
+	char						src[10];
 	char						returnmsg[MSGSZ];
 	double					gtimer;
 	int							fdi;
@@ -212,6 +254,7 @@ void * server_connect(void * arg)  {
 	std::cout << "Connecting to pipes" << std::endl;
 	sprintf(pipe_in, "fifo-%s-0", cid);
 	sprintf(pipe_out, "fifo-0-%s", cid);
+	sprintf(src, "client:%s", cid);
 
 	// Opening both pipes
 	std::cout << pipe_in << std::endl;
@@ -222,20 +265,52 @@ void * server_connect(void * arg)  {
 
 	while (read(fdi, buffer, MSGSZ) > 0)  {
 		// Reading the cmds from client.
-		tokenizer(buffer, tokens);
-		strcpy(packet_type, tokens[1].c_str());
-		write(fdo, tokens[1].c_str(), MSGSZ);
+		strcpy(packet_type, buffer);
+		write(fdo, buffer, MSGSZ);
 
 		// Server task switch. Independent function doesn't have enough info
-		if (strncmp(packet_type, "gtime", 5) == 0)  {
+		if (strncmp(packet_type, "GTIME", 5) == 0)  {
 			// For gtime
+			print_received(src, packet_type);
 			gtimer = gtime_cmd();
 			sprintf(returnmsg, "TIME %0.2f", gtimer);
 			write(fdo, returnmsg, MSGSZ);
-		} else if (strncmp(packet_type, "delay", 5) == 0)  {
+
+		}  else if (strncmp(packet_type, "DELAY", 5) == 0)  {
 			// This is the delay function
-			delay_cmd(tokens[2].c_str());
-		}
+			print_received(src, packet_type);
+			if (read(fdi, buffer, MSGSZ) > 0)  {
+				std::cout << buffer << std::endl;
+				delay_cmd(buffer);
+			};
+			
+		}  else if (strncmp(packet_type, "QUIT", 4) == 0)  {
+			// This is the delay function
+			write(fdo, packet_type, MSGSZ);
+			
+		} else if (strncmp(packet_type, "PUT", 3) == 0)  {
+			// This is the delay function
+			print_received(src, packet_type);
+			if (read(fdi, buffer, MSGSZ) > 0)  {
+				std::cout << buffer << std::endl;
+			};
+			
+		}else if (strncmp(packet_type, "GET", 3) == 0)  {
+			// This is the delay function
+			print_received(src, packet_type);
+			if (read(fdi, buffer, MSGSZ) > 0)  {
+				std::cout << buffer << std::endl;
+			};
+			
+		}else if (strncmp(packet_type, "DELETE", 6) == 0)  {
+			// This is the delay function
+			print_received(src, packet_type);
+			if (read(fdi, buffer, MSGSZ) > 0)  {
+				std::cout << buffer << std::endl;
+			};
+			
+		};
+
 		list_count++;
 	}
 	std::cout << "OUT OF LOOP" << std::endl;
