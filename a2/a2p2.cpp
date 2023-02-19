@@ -5,11 +5,14 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
 #include <sys/stat.h>
 #include <unistd.h>
 
+#define		ARGAMT						3
 #define 	NCLIENT 					3
 #define		BUFFERSZ 					3
+#define		MSGSZ							512
 
 //=============================================================================
 // Structs
@@ -48,7 +51,29 @@ void fifo_open_fail()  {
 	std::cout << "Failed to open the fifo" << std::endl;
 	exit(EXIT_FAILURE);
 }
+//=============================================================================
+// Tokenization
+void tokenizer(char * cmdline, std::string * tokens)  {
+	/* Goal here is to tokenize the c string input*/
+	char							WSPACE[] = "\t ";
+	char *						buffer = strtok(cmdline, WSPACE);
+	int								count = 0;
+	while (buffer != NULL)  {
+		// Putting strings down
+		tokens[count] = buffer;
+		count++;
+		buffer = strtok(NULL, WSPACE);
+	}
+};
 
+//=============================================================================
+// Cmd functions
+
+void quit_cmd()  {
+	/* This is for when the server sends the quit cmd back to the client*/
+	std::cout << "quitting" << std::endl;
+	exit(EXIT_SUCCESS);
+}
 //=============================================================================
 // Utilities
 void * fifo_write(void * arg)  {
@@ -80,28 +105,37 @@ void send_id2s(int idNumber)  {
 void * client_cmd_send(void * arg)  {
 	/* This function uses the io stream to send cmd lines to the server*/
 	csend_t *				csend = (csend_t *) arg;
+	char						cid[2];
 	int 						fd;
 	std::fstream		fp(csend->inFile);
 	std::string 		line;
 	wfifo_t					wfifo;
-	fd = open(csend->c2s_fifo, O_WRONLY | O_NONBLOCK);
+
+	sprintf(cid, "%d", csend->cid);
+	std::cout << "Connecting to server" << std::endl;
+	std::cout << csend->c2s_fifo << std::endl;
+	fd = open(csend->c2s_fifo, O_WRONLY);
+	std::cout << "Connected to server" << std::endl;
 
 	wfifo.fifo_n = csend->c2s_fifo;
 	while (std::getline(fp, line))  {
 		// Loop for grabbing cmd lines from the client file
-		if ((line[0] == '#') || (line[0] == '\n') || (line.size() == 0))  {
+		if ((line[0] == '#')
+		|| (line[0] == '\n')
+		|| (line.size() == 0)
+		|| (line[0] != cid[0])
+		)  {
 			// Skipping if it's a comment, or line is empty
 			continue;
 		}
-		// Debugging	
-		std::cout << line << std::endl;
 		wfifo.line = line;
 		// line_s = line.c_str();
 		// Writing the line to fifo
-		write(fd, line.c_str(), strlen(line.c_str()) + 1);
-		std::cout << "SENT TO PIPE" << std::endl;
+		write(fd, line.c_str(), MSGSZ);
 	}
+	std::cout << "GOT OUT OF LOOP" << std::endl;
 	close(fd);
+	// unlink(csend->c2s_fifo);
 	sleep(1);
 	pthread_exit(NULL);
 }
@@ -109,9 +143,60 @@ void * client_cmd_send(void * arg)  {
 void * client_reciever(void * arg)  {
 	/* This function will be used with a thread to take inputs*/
 	csend_t *					crecieve = (csend_t *) arg;
+	char							buffer[MSGSZ];
 	int								fd;
 
+	std::cout << "Recieving from server" << std::endl;
+	std::cout << crecieve->c2s_fifo << std::endl;
 	fd = open(crecieve->c2s_fifo, O_RDONLY);
+	while (1)  {
+		if (read(fd, buffer, MSGSZ) > 0)  {
+			std::cout << buffer << std::endl;
+			if (strncmp(buffer, "quit", 4) == 0)  {
+				std::cout << buffer << std::endl;
+				break;
+			}
+		}
+	}
+	std::cout << "EXITED R LOOP" << std::endl;
+	close(fd);
+	unlink(crecieve->c2s_fifo);
+}
+
+void * server_connect(void * arg)  {
+	/* This takes the client id, and connect this thread to the pipe*/
+	char *					cid = (char *) arg;
+	char						buffer[MSGSZ];
+	char						pipe_in[10];
+	char						pipe_out[10];
+	int							fdi;
+	int							fdo;
+	std::string			tokens[ARGAMT];
+
+	// Getting the names of the pipes
+	std::cout << "Connecting to pipes" << std::endl;
+	sprintf(pipe_in, "fifo-%s-0", cid);
+	sprintf(pipe_out, "fifo-0-%s", cid);
+
+	// Opening both pipes
+	std::cout << pipe_in << std::endl;
+	fdi = open(pipe_in, O_RDONLY);
+	std::cout << "Opened the in pipe" << std::endl;
+	fdo = open(pipe_out, O_WRONLY);
+	std::cout << "Opened the out pipe" << std::endl;
+
+	while (read(fdi, buffer, MSGSZ) > 0)  {
+		// Reading the cmds from client.
+		tokenizer(buffer, tokens);
+		write(fdo, tokens[1].c_str(), MSGSZ);
+
+	}
+	std::cout << "OUT OF LOOP" << std::endl;
+	close(fdi);
+	close(fdo);
+	unlink(pipe_in);
+	pthread_exit(NULL);
+
 }
 
 void * server_reciever(void * arg)  {
@@ -121,21 +206,31 @@ void * server_reciever(void * arg)  {
 	char *					init_fifo = "fifo-to-0";
 	char						buffer[BUFFERSZ];
 	int							fd1;
+	pthread_t				tidc;
 	unsigned int		count = 0;
 	mkfifo(init_fifo, 0666);  // Figure out what the number means
 	fd1 = open(init_fifo, O_RDONLY);
 
 	while (1) {
+		
 		// Wait for a signal
 		read(fd1, buffer, BUFFERSZ);
 		//std::cout << strlen(buffer) << std::endl;
 		if ((strlen(buffer) != 0) && (buffer != "\n"))  {
 			std::cout << buffer << std::endl;
+			pthread_create(
+				&tidc,
+				NULL,
+				server_connect,
+				(void *) buffer
+			);
+			pthread_join(tidc, NULL);
 		}
 		
-		//std::cout << buffer << std::endl;
+		
 	}
 	close(fd1);
+	unlink(init_fifo);
 }
 
 //=============================================================================
@@ -144,9 +239,11 @@ void server_main()  {
 	// This function will serve as the main function for the server
 
 	// Initilization
+	char				line[1024];
+	fd_set			fds;
 	int					idNumber = 0;
 	pthread_t		tid1;
-	std::cout << "Running the server" << std::endl;
+	std::cout << "a2p2: do_server" << std::endl;
 
 	pthread_create(
 		&tid1,
@@ -154,6 +251,22 @@ void server_main()  {
 		server_reciever,
 		NULL
 	);
+
+	while (1)  {
+		/* Testing */
+		FD_ZERO(&fds);
+		FD_SET(STDIN_FILENO, &fds);
+		select(STDIN_FILENO+1, &fds, NULL, NULL, NULL);
+
+		if (FD_ISSET(STDIN_FILENO, &fds))  {
+			// If we catch an input
+			if (fgets(line, 1024, stdin))  {
+				if (strncmp(line, "quit", 4) == 0)  {
+					exit(EXIT_SUCCESS);
+				}
+			}
+		}
+	}
 
 	pthread_join(tid1, NULL);
 
@@ -176,8 +289,8 @@ void client_main(int idNumber, char * inputFile)  {
 	<< ", inputFile = " << inputFile << ")" << std::endl;
 
 	// Need to create the fifo name
-	sprintf(c2s_fifo, "fifo-0-%d", idNumber);
-	sprintf(s2c_fifo, "fifo-%d-0", idNumber);
+	sprintf(s2c_fifo, "fifo-0-%d", idNumber);
+	sprintf(c2s_fifo, "fifo-%d-0", idNumber);
 	csend.c2s_fifo = c2s_fifo;
 	crecieve.c2s_fifo = s2c_fifo;
 	// Making the fifo file
@@ -189,7 +302,7 @@ void client_main(int idNumber, char * inputFile)  {
 	csend.inFile = inputFile;
 	csend.cid = idNumber;
 	// Creating thread for sending data to the server
-	std::cout << "CREATEING THREAD" << std::endl;
+	std::cout << "CREATEING THREADS" << std::endl;
 	if (pthread_create(
 		&tids,
 		NULL,
@@ -199,8 +312,18 @@ void client_main(int idNumber, char * inputFile)  {
 		// Thread creation failure handling
 		thread_create_fail();
 	};
-
+	if (pthread_create(
+		&tidr,
+		NULL,
+		client_reciever,
+		(void *) &crecieve
+	) != 0)  {
+		// Thread creation failure handling
+		thread_create_fail();
+	};
 	pthread_join(tids, NULL);
+	pthread_join(tidr, NULL);
+
 
 	
 	return;
