@@ -3,7 +3,9 @@
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <pthread.h>
+#include <set>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
@@ -33,19 +35,14 @@ typedef struct  {
 	std::string		line;
 } wfifo_t;
 
-typedef struct  {
-	// For each object
-	int						cid;
-	char					objName[MAXWORD];
-} single_obj;
 
 //=============================================================================
 // Global variables
 
-clock_t					start = times(NULL);
-int							list_count = 0;
-static long			clktck = 0;
-single_obj			the_list[32];
+clock_t																	start = times(NULL);
+int																			list_count = 0;
+static long															clktck = 0;
+std::map<int, std::set<std::string>>		obj_list;
 
 
 //=============================================================================
@@ -113,6 +110,19 @@ double gtime_cmd()  {
 	return seconds_passed;
 }
 
+int put_cmd(char * cid, char * item)  {
+	/* This function adds an object to the list*/
+	std::string				item_s = item;
+	int								cidi = atoi(cid);
+	if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
+		// Already exists, return an error
+		return -1;
+	}  else  {
+		obj_list[cidi].insert(item_s);
+		return 0;
+	}
+}
+
 void delay_cmd(const char * delaytime)  {
 	/* This is the delay command. Takes in milliseconds*/
 	int								converted_time = atoi(delaytime);
@@ -123,6 +133,7 @@ void delay_cmd(const char * delaytime)  {
 }
 //=============================================================================
 // Utilities
+
 void * fifo_write(void * arg)  {
 	/* This function uses threads to write to fifo*/
 	wfifo_t *					wfifo = (wfifo_t *) arg;
@@ -163,6 +174,20 @@ void pthread_cleanup_handler(void * arg)  {
 	unlink("fifo-to-0");
 }
 
+void output_list()  {
+	/* This function makes the server output the contents of the object list*/
+	std::cout << "Object table:" << std::endl;
+
+	for (auto i : obj_list)  {
+		std::cout << i.first << std::endl;
+		for (auto j : i.second)  {
+			std::cout << "(owner= " << i.first << ", name= " << j << ")"
+			<< std::endl;
+		}
+	}
+	return;
+}
+
 //=============================================================================
 // Submain/loops
 
@@ -180,20 +205,17 @@ void * client_cmd_send(void * arg)  {
 	std::fstream		fp(csend->inFile);
 	std::string 		line;
 	std::string			tokens[ARGAMT];
-	wfifo_t					wfifo;
+	
 
 	sprintf(cid, "%d", csend->cid);
 	sprintf(src_self, "client:%s", cid);
 	sprintf(s2c_fifo, "fifo-0-%s", cid);
 
-	std::cout << "Connecting to server" << std::endl;
-	std::cout << csend->c2s_fifo << std::endl;
 	fd = open(csend->c2s_fifo, O_WRONLY);
 	fdr = open(s2c_fifo, O_RDONLY);
-	
-	std::cout << "Connected to server" << std::endl;
+	std::cout << std::endl;
 
-	wfifo.fifo_n = csend->c2s_fifo;
+	
 	while (std::getline(fp, line) || 1)  {
 		// Loop for grabbing cmd lines from the client file
 		if ((line[0] == '#')
@@ -217,11 +239,13 @@ void * client_cmd_send(void * arg)  {
 			
 			continue;
 		}  else if (strncmp(tokens[1].c_str(), "put", 3) == 0)  {
+			// This switch handles PUT input.
 			strcpy(packet_type, "PUT");
 			write(fd, packet_type, MSGSZ);
 			write(fd, tokens[2].c_str(), MSGSZ);
 			sprintf(buffer, "(%s: %s)", packet_type, tokens[2].c_str());
 			print_transmitted(src_self, buffer);
+
 		}  else if (strncmp(tokens[1].c_str(), "get", 3) == 0)  {
 			strcpy(packet_type, "GET");
 			write(fd, packet_type, MSGSZ);
@@ -243,12 +267,18 @@ void * client_cmd_send(void * arg)  {
 		if (strncmp(buffer, "QUIT", 4) == 0)  {
 			// Quit command
 			break;
+		}  else if (strncmp(buffer, "TIME", 4) == 0)  {
+			// TIME packet
+			read(fdr, packet_type, MSGSZ);
+			sprintf(buffer, "(TIME:\t%s)", packet_type);
+			print_received(src_server, buffer);
+		}  else  {
+			print_received(src_server, buffer);
 		}
-		print_received(src_server, buffer);
 		
 		std::cout << std::endl;
 	}
-	std::cout << "GOT OUT OF LOOP" << std::endl;
+
 	close(fd);
 	close(fdr);
 	unlink(s2c_fifo);
@@ -264,24 +294,25 @@ void * server_connect(void * arg)  {
 	char						pipe_in[10];
 	char						pipe_out[10];
 	char						src[10];
+	char						src_self[7] = "server";
 	char						returnmsg[MSGSZ];
+	char						word[MAXWORD];
 	double					gtimer;
+	int							err_flag;
 	int							fdi;
 	int							fdo;
 	std::string			tokens[ARGAMT];
 
 	// Getting the names of the pipes
-	std::cout << "Connecting to pipes" << std::endl;
+
 	sprintf(pipe_in, "fifo-%s-0", cid);
 	sprintf(pipe_out, "fifo-0-%s", cid);
 	sprintf(src, "client:%s", cid);
 
 	// Opening both pipes
-	std::cout << pipe_in << std::endl;
-	fdi = open(pipe_in, O_RDONLY);
-	std::cout << "Opened the in pipe" << std::endl;
+	
+	fdi = open(pipe_in, O_RDONLY);	
 	fdo = open(pipe_out, O_WRONLY);
-	std::cout << "Opened the out pipe" << std::endl;
 
 	while (read(fdi, buffer, MSGSZ) > 0)  {
 		// Reading the cmds from client.
@@ -292,17 +323,14 @@ void * server_connect(void * arg)  {
 			// For gtime
 			print_received(src, packet_type);
 			gtimer = gtime_cmd();
-			sprintf(returnmsg, "TIME %0.2f", gtimer);
-			write(fdo, returnmsg, MSGSZ);
-
-		}  else if (strncmp(packet_type, "DELAY", 5) == 0)  {
-			// This is the delay function
-			print_received(src, packet_type);
-			if (read(fdi, buffer, MSGSZ) > 0)  {
-				std::cout << buffer << std::endl;
-				delay_cmd(buffer);
-			};
-			write(fdo, returnmsg, MSGSZ);
+			// Sending the TIME packet
+			strcpy(packet_type, "TIME");
+			sprintf(buffer, "%0.2f", gtimer);
+			write(fdo, packet_type, MSGSZ);
+			write(fdo, buffer, MSGSZ);
+			// Transmitted msg
+			sprintf(returnmsg, "(TIME:\t%0.2f)", gtimer);
+			print_transmitted(src_self, returnmsg);
 			
 		}  else if (strncmp(packet_type, "QUIT", 4) == 0)  {
 			// This is the delay function
@@ -310,32 +338,53 @@ void * server_connect(void * arg)  {
 			break;
 			
 		} else if (strncmp(packet_type, "PUT", 3) == 0)  {
-			// This is the delay function
-			print_received(src, packet_type);
-			if (read(fdi, buffer, MSGSZ) > 0)  {
-				std::cout << buffer << std::endl;
-			};
-			write(fdo, returnmsg, MSGSZ);
+			// This is the switch for put
 			
-		}else if (strncmp(packet_type, "GET", 3) == 0)  {
-			// This is the delay function
-			print_received(src, packet_type);
-			if (read(fdi, buffer, MSGSZ) > 0)  {
-				std::cout << buffer << std::endl;
+			if (read(fdi, word, MSGSZ) > 0)  {
+				// If we were able to read the thing
+				sprintf(returnmsg, "(%s: %s)", packet_type, word);
+				print_received(src, returnmsg);
+				err_flag = put_cmd(cid, word);
+				if (err_flag == 0)  {
+				sprintf(returnmsg, "OK");
+				write(fdo, returnmsg, MSGSZ);
+				}  else  {
+					// Error handling
+				}
+				print_transmitted(src_self, returnmsg);
+				
+
 			};
-			write(fdo, returnmsg, MSGSZ);
-		}else if (strncmp(packet_type, "DELETE", 6) == 0)  {
+			
+			
+			
+		}  else if (strncmp(packet_type, "GET", 3) == 0)  {
 			// This is the delay function
-			print_received(src, packet_type);
-			if (read(fdi, buffer, MSGSZ) > 0)  {
-				std::cout << buffer << std::endl;
+			if (read(fdi, word, MSGSZ) > 0)  {
+				// If we were able to read the thing
+				sprintf(returnmsg, "(%s: %s)", packet_type, word);
+				print_received(src, returnmsg);
+				sprintf(returnmsg, "OK");
+				write(fdo, returnmsg, MSGSZ);
+				print_transmitted(src_self, returnmsg);
+
 			};
-			write(fdo, returnmsg, MSGSZ);
+		}  else if (strncmp(packet_type, "DELETE", 6) == 0)  {
+			// This is the delay function
+			if (read(fdi, word, MSGSZ) > 0)  {
+				// If we were able to read the thing
+				sprintf(returnmsg, "(%s: %s)", packet_type, word);
+				print_received(src, returnmsg);
+				sprintf(returnmsg, "OK");
+				write(fdo, returnmsg, MSGSZ);
+				print_transmitted(src_self, returnmsg);
+
+			};
 		};
 		std::cout << std::endl;
 		list_count++;
 	}
-	std::cout << "OUT OF LOOP" << std::endl;
+	// Closing the pipes with this client
 	close(fdi);
 	close(fdo);
 	unlink(pipe_in);
@@ -411,7 +460,7 @@ void server_main()  {
 				if (strncmp(line, "quit", 4) == 0)  {
 					quit_cmd();
 				}  else if (strncmp(line, "list", 4) == 0)  {
-					std::cout << "LIST PLACEHOLDER" << std::endl;
+					output_list();
 					std::cout << list_count << std::endl;
 				}
 			}
@@ -452,7 +501,6 @@ void client_main(int idNumber, char * inputFile)  {
 	csend.inFile = inputFile;
 	csend.cid = idNumber;
 	// Creating thread for sending data to the server
-	std::cout << "CREATEING THREADS" << std::endl;
 	if (pthread_create(
 		&tids,
 		NULL,
