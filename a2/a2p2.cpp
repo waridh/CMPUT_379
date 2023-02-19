@@ -7,11 +7,13 @@
 #include <stdlib.h>
 #include <string>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #define		ARGAMT						3
 #define 	NCLIENT 					3
 #define		BUFFERSZ 					3
+#define		MAXWORD						32
 #define		MSGSZ							512
 
 //=============================================================================
@@ -29,6 +31,19 @@ typedef struct  {
 	char * 				fifo_n;
 	std::string		line;
 } wfifo_t;
+
+typedef struct  {
+	// For each object
+	int						cid;
+	char					objName[MAXWORD];
+} single_obj;
+
+//=============================================================================
+// Global variables
+
+int							list_count = 0;
+single_obj			the_list[32];
+time_t					start = time(0);
 
 //=============================================================================
 // Error handling
@@ -74,6 +89,18 @@ void quit_cmd()  {
 	std::cout << "quitting" << std::endl;
 	exit(EXIT_SUCCESS);
 }
+
+double gtime_cmd()  {
+	double						seconds_passed = difftime(time(0), start);
+	return seconds_passed;
+}
+
+void delay_cmd(const char * delaytime)  {
+	/* This is the delay command. Takes in milliseconds*/
+	int								converted_time = atoi(delaytime);
+	std::cout << "Delaying" << std::endl;
+	usleep(converted_time*1000);
+}
 //=============================================================================
 // Utilities
 void * fifo_write(void * arg)  {
@@ -105,10 +132,13 @@ void send_id2s(int idNumber)  {
 void * client_cmd_send(void * arg)  {
 	/* This function uses the io stream to send cmd lines to the server*/
 	csend_t *				csend = (csend_t *) arg;
+	char						buffer[MSGSZ];
 	char						cid[2];
+	char						packet_type[10];
 	int 						fd;
 	std::fstream		fp(csend->inFile);
 	std::string 		line;
+	std::string			tokens[ARGAMT];
 	wfifo_t					wfifo;
 
 	sprintf(cid, "%d", csend->cid);
@@ -128,8 +158,10 @@ void * client_cmd_send(void * arg)  {
 			// Skipping if it's a comment, or line is empty
 			continue;
 		}
-		wfifo.line = line;
-		// line_s = line.c_str();
+		strcpy(buffer, line.c_str());
+		// Switch cases for the file inputs
+		tokenizer(buffer, tokens);
+
 		// Writing the line to fifo
 		write(fd, line.c_str(), MSGSZ);
 	}
@@ -167,8 +199,11 @@ void * server_connect(void * arg)  {
 	/* This takes the client id, and connect this thread to the pipe*/
 	char *					cid = (char *) arg;
 	char						buffer[MSGSZ];
+	char						packet_type[10];
 	char						pipe_in[10];
 	char						pipe_out[10];
+	char						returnmsg[MSGSZ];
+	double					gtimer;
 	int							fdi;
 	int							fdo;
 	std::string			tokens[ARGAMT];
@@ -188,8 +223,20 @@ void * server_connect(void * arg)  {
 	while (read(fdi, buffer, MSGSZ) > 0)  {
 		// Reading the cmds from client.
 		tokenizer(buffer, tokens);
+		strcpy(packet_type, tokens[1].c_str());
 		write(fdo, tokens[1].c_str(), MSGSZ);
 
+		// Server task switch. Independent function doesn't have enough info
+		if (strncmp(packet_type, "gtime", 5) == 0)  {
+			// For gtime
+			gtimer = gtime_cmd();
+			sprintf(returnmsg, "TIME %0.2f", gtimer);
+			write(fdo, returnmsg, MSGSZ);
+		} else if (strncmp(packet_type, "delay", 5) == 0)  {
+			// This is the delay function
+			delay_cmd(tokens[2].c_str());
+		}
+		list_count++;
 	}
 	std::cout << "OUT OF LOOP" << std::endl;
 	close(fdi);
@@ -262,7 +309,10 @@ void server_main()  {
 			// If we catch an input
 			if (fgets(line, 1024, stdin))  {
 				if (strncmp(line, "quit", 4) == 0)  {
-					exit(EXIT_SUCCESS);
+					quit_cmd();
+				}  else if (strncmp(line, "list", 4) == 0)  {
+					std::cout << "LIST PLACEHOLDER" << std::endl;
+					std::cout << list_count << std::endl;
 				}
 			}
 		}
