@@ -36,10 +36,10 @@ typedef struct  {
 //=============================================================================
 // Global variables
 
-clock_t																	start = times(NULL);
-int																			list_count = 0;
-static long															clktck = 0;
-std::map<int, std::set<std::string>>		obj_list;
+clock_t																	start = times(NULL); // For gtime
+int																			list_count = 0; // Counting list
+static long															clktck = 0; // Clk work
+std::map<int, std::set<std::string>>		obj_list; // We are holding the objs
 
 
 //=============================================================================
@@ -87,11 +87,12 @@ void quit_cmd(int fd)  {
 	/* This is for when the server sends the quit cmd back to the client*/
 	std::cout << "quitting" << std::endl;
 	close(fd);
-	unlink("fifo-to-0");
+	unlink("fifo-to-0"); // Also deletes the select pipe
 	exit(EXIT_SUCCESS);
 }
 
 double gtime_cmd()  {
+	/* Gets the time since start. Takes advantage of times()*/
 	clock_t						current_time = times(NULL);
 	clock_t						c_seconds_passed = current_time - start;
 	double						seconds_passed;
@@ -131,7 +132,7 @@ int get_cmd(char * cid, char * item)  {
 			return 0;
 		}
 	}
-	/* The object does not exist in the thing*/
+	/* The object does not exist in the thing, return error*/
 	return -1;
 }
 
@@ -168,19 +169,6 @@ void delay_cmd(const char * delaytime)  {
 //=============================================================================
 // Utilities
 
-void send_id2s(int idNumber)  {
-	/* The goal of this function is to send the integer cid to the server*/
-	const char *					init_fifo = "fifo-to-0";
-	char						idmsg[BUFFERSZ];
-	int							fd;
-	fd = open(init_fifo, O_WRONLY);
-	sprintf(idmsg, "%d", idNumber);
-
-	write(fd, idmsg, BUFFERSZ + 1);	
-
-	close(fd);
-}
-
 void print_transmitted(char * src, char * packet_inf)  {
 	/* This function prints info about the sent packet*/
 	std::cout << "Transmitted (src= " << src << ") " << packet_inf << std::endl;
@@ -201,11 +189,11 @@ void pthread_cleanup_handler(void * arg)  {
 void output_list()  {
 	/* This function makes the server output the contents of the object list*/
 	std::cout << "Object table:" << std::endl;
-
+	if (list_count == 0)  {
+		std::cout << "list is empty" << std::endl;
+	}
 	for (auto i : obj_list)  {
-		if (list_count == 0)  {
-			std::cout << "list is empty" << std::endl;
-		}
+		
 		for (auto j : i.second)  {
 			std::cout << "(owner= " << i.first << ", name= " << j << ")"
 			<< std::endl;
@@ -239,16 +227,16 @@ void * client_cmd_send(void * arg)  {
 	std::string 		line;
 	std::string			tokens[ARGAMT];
 	
-
+	// Getting the names of the pipes and cid for selector
 	sprintf(cid, "%d", csend->cid);
 	sprintf(pipe_mux, "fifo-to-0");
 	sprintf(s2c_fifo, "fifo-0-%s", cid);
 	
-	
+	// Waking up the server	
 	fdm = open(pipe_mux, O_WRONLY | O_NONBLOCK);
-
 	write(fdm, cid, CIDSZ);
-	
+
+	// Establishing connection with the server via opening both pipes	
 	fd = open(csend->c2s_fifo, O_WRONLY);
 	fdr = open(s2c_fifo, O_RDONLY);
 
@@ -262,7 +250,7 @@ void * client_cmd_send(void * arg)  {
 		|| (line.size() == 0)
 		|| (line[0] != cid[0])
 		)  {
-			// Skipping if it's a comment, or line is empty
+			// Skipping if it's a comment, or line is empty, or if it's not for client
 			continue;
 		}
 
@@ -273,17 +261,17 @@ void * client_cmd_send(void * arg)  {
 		tokenizer(buffer, tokens);
 		
 		if (strncmp(tokens[1].c_str(), "delay", 5) == 0)  {
-	
+			// Delay is placed here to prevent waking up the server.
 			delay_cmd(tokens[2].c_str());
 			
 			continue;
 		}
 
 		if (switcher == 1)  {
+			// Continue to send the select signal to the server so it can do mux
 			write(fdm, cid, CIDSZ);
 		}
-		
-		
+			
 		if (strncmp(tokens[1].c_str(), "gtime", 5) == 0)  {
 			// Sending the gtime function
 			strcpy(packet_type, "GTIME");
@@ -298,18 +286,21 @@ void * client_cmd_send(void * arg)  {
 			print_transmitted(src_self, buffer);
 
 		}  else if (strncmp(tokens[1].c_str(), "get", 3) == 0)  {
+			// Sending the get packet over.
 			strcpy(packet_type, "GET");
 			write(fd, packet_type, MSGSZ);
 			write(fd, tokens[2].c_str(), MSGSZ);
 			sprintf(buffer, "(%s: %s)", packet_type, tokens[2].c_str());
 			print_transmitted(src_self, buffer);
 		}  else if (strncmp(tokens[1].c_str(), "delete", 6) == 0)  {
+			// Sending DELETE packet
 			strcpy(packet_type, "DELETE");
 			write(fd, packet_type, MSGSZ);
 			write(fd, tokens[2].c_str(), MSGSZ);
 			sprintf(buffer, "(%s: %s)", packet_type, tokens[2].c_str());
 			print_transmitted(src_self, buffer);
 		}  else if (strncmp(tokens[1].c_str(), "quit", 4) == 0)  {
+			// Informing the server that we are quitting the client. Needs responds
 			strcpy(packet_type, "QUIT");
 			write(fd, packet_type, MSGSZ);
 		}
@@ -335,7 +326,7 @@ void * client_cmd_send(void * arg)  {
 		switcher = 1;
 	}
 
-	// Making sure that we have the closing msgs ready
+	// Making sure that we have the closing pipenames ready
 	sprintf(s2c_fifo, "fifo-0-%s", cid);
 	sprintf(ecid, "-%s", cid);
 	write(fdm, ecid, MSGSZ);
@@ -353,7 +344,9 @@ void * client_cmd_send(void * arg)  {
 }
 
 void server_connect(char * cid, int fdi, int fdo)  {
-	/* This takes the client id, and connect this thread to the pipe*/
+	/* This function does the two way communication with the client every time
+	the select signal is recieved. It has all the cases in the function, so it
+	will have a proper response for all the packets*/
 	char						buffer[MSGSZ];
 	char						packet_type[10];
 	char						pipe_in[10];
@@ -372,20 +365,18 @@ void server_connect(char * cid, int fdi, int fdo)  {
 	sprintf(pipe_out, "fifo-0-%s", cid);
 	sprintf(src, "client:%s", cid);
 
-	// Opening both pipes
-
 	if (read(fdi, buffer, MSGSZ) > 0)  {
 		// Reading the cmds from client.
 		
 		strcpy(packet_type, buffer);
 		sprintf(returnmsg, "OK");
 		if (strncmp(packet_type, "QUIT", 4) == 0)  {
-			// This is the delay function
+			// When QUIT is received, we don't want to do much else. Just return
 			write(fdo, packet_type, MSGSZ);
 			return;
 			
 		}
-
+		// For formatting
 		std::cout << std::endl;
 		// Server task switch. Independent function doesn't have enough info
 		if (strncmp(packet_type, "GTIME", 5) == 0)  {
@@ -405,7 +396,7 @@ void server_connect(char * cid, int fdi, int fdo)  {
 			// This is the switch for put
 			
 			if (read(fdi, word, MSGSZ) > 0)  {
-				// If we were able to read the thing
+				// If we were able to read the message
 				sprintf(returnmsg, "(%s: %s)", packet_type, word);
 				print_received(src, returnmsg);
 				err_flag = put_cmd(cid, word);
@@ -425,7 +416,7 @@ void server_connect(char * cid, int fdi, int fdo)  {
 			};
 				
 		}  else if (strncmp(packet_type, "GET", 3) == 0)  {
-			// This is the delay function
+			// Handling for the GET packet
 			if (read(fdi, word, MSGSZ) > 0)  {
 				// If we were able to read the thing
 				sprintf(returnmsg, "(%s: %s)", packet_type, word);
@@ -448,7 +439,7 @@ void server_connect(char * cid, int fdi, int fdo)  {
 
 			};
 		}  else if (strncmp(packet_type, "DELETE", 6) == 0)  {
-			// This is the delay function
+			// DELETE packet handling
 			if (read(fdi, word, MSGSZ) > 0)  {
 				// If we were able to read the thing
 				sprintf(returnmsg, "(%s: %s)", packet_type, word);
@@ -478,7 +469,7 @@ void server_connect(char * cid, int fdi, int fdo)  {
 			};
 		};
 	}
-	// Closing the pipes with this client
+	
 	return;
 }
 
@@ -501,10 +492,13 @@ void server_main()  {
 	struct pollfd	ufds[2];
 	
 
-
+	// Formatting texts
 	std::cout << "a2p2: do_server" << std::endl;
+
 	mkfifo(initfifo, 0666);
 	fdi = open(initfifo, O_RDONLY | O_NONBLOCK);
+
+	// Prep for polling
 	ufds[0].fd = 0;
 	ufds[0].events = POLLIN;
 	ufds[0].revents = 0;
@@ -516,7 +510,6 @@ void server_main()  {
 		/* Polling for both user input and mux fifo */
 		
 		if (poll(ufds, 2, timeout) > 0)  {
-			//std::cout << "Polling" << std::endl;
 			// Checking the stdin
 			if ((ufds[0].revents & POLLIN) != 0)  {
 
@@ -530,7 +523,7 @@ void server_main()  {
 					}
 				}
 			} if ((ufds[1].revents & POLLIN) != 0)  {
-				// Looking at the multiplexor
+				// Looking at the select signal
 				if (read(ufds[1].fd, cid, CIDSZ) > 0)  {
 					// If we were able to read from the selector switch	
 					cidi = atoi(cid);
