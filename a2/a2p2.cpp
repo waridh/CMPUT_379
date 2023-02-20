@@ -19,7 +19,8 @@
 #define		BUFFERSZ 					3
 #define		FIFONAMESZ				10
 #define		MAXWORD						32
-#define		MSGSZ							512
+#define		MSGSZ							64
+#define		CIDSZ							3
 
 //=============================================================================
 // Structs
@@ -30,12 +31,6 @@ typedef struct  {
 	char * 				c2s_fifo;
 	int						cid;
 } csend_t;
-
-typedef struct  {
-	// For writing to fifo
-	char * 				fifo_n;
-	std::string		line;
-} wfifo_t;
 
 
 //=============================================================================
@@ -88,9 +83,10 @@ void tokenizer(char * cmdline, std::string * tokens)  {
 //=============================================================================
 // Cmd functions
 
-void quit_cmd()  {
+void quit_cmd(int fd)  {
 	/* This is for when the server sends the quit cmd back to the client*/
 	std::cout << "quitting" << std::endl;
+	close(fd);
 	unlink("fifo-to-0");
 	exit(EXIT_SUCCESS);
 }
@@ -172,16 +168,6 @@ void delay_cmd(const char * delaytime)  {
 //=============================================================================
 // Utilities
 
-void * fifo_write(void * arg)  {
-	/* This function uses threads to write to fifo*/
-	wfifo_t *					wfifo = (wfifo_t *) arg;
-	int								fd;
-	fd = open(wfifo->fifo_n, O_WRONLY | O_NONBLOCK);
-	write(fd, wfifo->line.c_str(), strlen(wfifo->line.c_str()) + 1);
-	close(fd);
-	pthread_exit(NULL);
-}
-
 void send_id2s(int idNumber)  {
 	/* The goal of this function is to send the integer cid to the server*/
 	const char *					init_fifo = "fifo-to-0";
@@ -237,7 +223,8 @@ void * client_cmd_send(void * arg)  {
 	csend_t *				csend = (csend_t *) arg;
 	char						buffer[MSGSZ];
 	char						msg[MSGSZ];
-	char						cid[2];
+	char						cid[CIDSZ];
+	char						ecid[MSGSZ];
 	char						packet_type[10];
 	char						pipe_mux[10];
 	char						s2c_fifo[10];
@@ -256,12 +243,15 @@ void * client_cmd_send(void * arg)  {
 	sprintf(cid, "%d", csend->cid);
 	sprintf(pipe_mux, "fifo-to-0");
 	sprintf(s2c_fifo, "fifo-0-%s", cid);
-	std::cout << "Got into the thing" << std::endl;
-	fdm = open(pipe_mux, O_WRONLY);
-	write(fdm, cid, MSGSZ);
-	std::cout << "OPENED MUX" << std::endl;
+	
+	
+	fdm = open(pipe_mux, O_WRONLY | O_NONBLOCK);
+
+	write(fdm, cid, CIDSZ);
+	
 	fd = open(csend->c2s_fifo, O_WRONLY);
 	fdr = open(s2c_fifo, O_RDONLY);
+
 	std::cout << std::endl;
 
 	
@@ -275,26 +265,30 @@ void * client_cmd_send(void * arg)  {
 			// Skipping if it's a comment, or line is empty
 			continue;
 		}
-		std::cout << cid << std::endl;
-		if (switcher == 1)  {
-			write(fdm, cid, MSGSZ);
-		}
-		std::cout << "Sent" << cid << std::endl;
+
 		// For some reason, the id for itself is changing
 		sprintf(src_self, "client:%s", cid);
 		strcpy(buffer, line.c_str());
 		// Switch cases for the file inputs
 		tokenizer(buffer, tokens);
+		
+		if (strncmp(tokens[1].c_str(), "delay", 5) == 0)  {
+	
+			delay_cmd(tokens[2].c_str());
+			
+			continue;
+		}
+
+		if (switcher == 1)  {
+			write(fdm, cid, CIDSZ);
+		}
+		
+		
 		if (strncmp(tokens[1].c_str(), "gtime", 5) == 0)  {
 			// Sending the gtime function
 			strcpy(packet_type, "GTIME");
 			write(fd, packet_type, MSGSZ);
 			print_transmitted(src_self, packet_type);
-		}  else if (strncmp(tokens[1].c_str(), "delay", 5) == 0)  {
-			
-			delay_cmd(tokens[2].c_str());
-			
-			continue;
 		}  else if (strncmp(tokens[1].c_str(), "put", 3) == 0)  {
 			// This switch handles PUT input.
 			strcpy(packet_type, "PUT");
@@ -337,15 +331,21 @@ void * client_cmd_send(void * arg)  {
 		}  else  {
 			print_received(src_server, packet_type);
 		}
-		if (switcher == 0)  {
-			switcher == 1;
-		}
 		std::cout << std::endl;
+		switcher = 1;
 	}
+
+	// Making sure that we have the closing msgs ready
 	sprintf(s2c_fifo, "fifo-0-%s", cid);
+	sprintf(ecid, "-%s", cid);
+	write(fdm, ecid, MSGSZ);
+	
+	// Closing all the pipes from this end
 	close(fd);
 	close(fdr);
 	close(fdm);
+
+	// Unlink the client specific pipes
 	unlink(s2c_fifo);
 	unlink(csend->c2s_fifo);
 	sleep(1);
@@ -376,8 +376,17 @@ void server_connect(char * cid, int fdi, int fdo)  {
 
 	if (read(fdi, buffer, MSGSZ) > 0)  {
 		// Reading the cmds from client.
+		
 		strcpy(packet_type, buffer);
 		sprintf(returnmsg, "OK");
+		if (strncmp(packet_type, "QUIT", 4) == 0)  {
+			// This is the delay function
+			write(fdo, packet_type, MSGSZ);
+			return;
+			
+		}
+
+		std::cout << std::endl;
 		// Server task switch. Independent function doesn't have enough info
 		if (strncmp(packet_type, "GTIME", 5) == 0)  {
 			// For gtime
@@ -392,12 +401,7 @@ void server_connect(char * cid, int fdi, int fdo)  {
 			sprintf(returnmsg, "(TIME:\t%0.2f)", gtimer);
 			print_transmitted(src_self, returnmsg);
 			
-		}  else if (strncmp(packet_type, "QUIT", 4) == 0)  {
-			// This is the delay function
-			write(fdo, packet_type, MSGSZ);
-			return;
-			
-		} else if (strncmp(packet_type, "PUT", 3) == 0)  {
+		}   else if (strncmp(packet_type, "PUT", 3) == 0)  {
 			// This is the switch for put
 			
 			if (read(fdi, word, MSGSZ) > 0)  {
@@ -473,58 +477,9 @@ void server_connect(char * cid, int fdi, int fdo)  {
 				print_transmitted(src_self, returnmsg);
 			};
 		};
-		std::cout << std::endl;
 	}
 	// Closing the pipes with this client
 	return;
-}
-
-// void * server_reciever(void * arg)  {
-// 	/* This thread function will loop and read inputs */
-// 	// Current idea. I will make this thread create a pipe that just takes ints
-// 	// from clients so that it knows to connect to what pipe.
-// 	const char *		init_fifo = "fifo-to-0";
-// 	char						buffer[BUFFERSZ];
-// 	int							fd1;
-// 	int							cid;
-// 	int							err;
-// 	pthread_t				tidc;
-// 	unsigned int		count = 0;
-// 	mkfifo(init_fifo, 0666);  // Figure out what the number means
-// 	fd1 = open(init_fifo, O_RDONLY);
-
-// 	while (1) {
-
-		
-// 		// Wait for a signal
-// 		read(fd1, buffer, BUFFERSZ);
-		
-// 		if ((strlen(buffer) != 0) && (buffer[0] != '\n'))  {
-// 			std::cout << buffer << std::endl;
-// 			// If we receive an id in the pipe
-// 			pthread_create(
-// 				&tidc,
-// 				NULL,
-// 				server_connect,
-// 				(void *) buffer
-// 			);
-
-// 			pthread_join(tidc, NULL);
-// 			// err = pthread_detach(tidc);
-// 			//std::cout << err << std::endl;
-// 		}
-
-		
-// 	}
-// 	close(fd1);
-// 	unlink(init_fifo);
-// 	pthread_exit(NULL);
-// }
-
-void test(int fd)  {
-	char				buffer[MSGSZ];
-	read(fd, buffer, MSGSZ);
-	std::cout << buffer << std::endl;
 }
 
 //=============================================================================
@@ -533,98 +488,73 @@ void server_main()  {
 	// This function will serve as the main function for the server
 
 	// Initilization
-	char					buffer[MSGSZ];
-	char					cid[BUFFERSZ];
+	char					cid[CIDSZ];
 	char					fifo_name[FIFONAMESZ];
 	char					line[1024];
 	const char *	initfifo = "fifo-to-0";
-	fd_set				fds;
-	fd_set				fifocheck;
 	int						cidi;
-	int						idNumber = 0;
+	int						ecid;
 	int						fdi;
 	int						mux_switchesi[NCLIENT] = {0};
 	int						mux_switcheso[NCLIENT] = {0};
-	int						rv;
 	int						timeout = 100;
 	struct pollfd	ufds[2];
-	pthread_t			tid1;
+	
 
 
 	std::cout << "a2p2: do_server" << std::endl;
 	mkfifo(initfifo, 0666);
-	fdi = open(initfifo, O_RDONLY);
+	fdi = open(initfifo, O_RDONLY | O_NONBLOCK);
 	ufds[0].fd = 0;
 	ufds[0].events = POLLIN;
 	ufds[0].revents = 0;
 	ufds[1].fd = fdi;
 	ufds[1].events = POLLIN;
-	std::cout << fdi << std::endl;
 
-	// pthread_create(
-	// 	&tid1,
-	// 	NULL,
-	// 	server_reciever,
-	// 	NULL
-	// );
 
 	while (1)  {
-		/* Testing */
-		// FD_ZERO(&fds);
-		// FD_SET(STDIN_FILENO, &fds);
-		// select(STDIN_FILENO+1, &fds, NULL, NULL, NULL);
-
-		// FD_ZERO(&fifocheck);
-		// FD_SET(fdi, &fifocheck);
-		// rv = select(fdi+1, &fifocheck, NULL, NULL, NULL);
-
-		// if (FD_ISSET(STDIN_FILENO, &fds))  {
-		// 	// If we catch an input
-			// if (fgets(line, 1024, stdin))  {
-			// 	if (strncmp(line, "quit", 4) == 0)  {
-			// 		quit_cmd();
-					
-			// 	}  else if (strncmp(line, "list", 4) == 0)  {
-			// 		output_list();
-					
-			// 	}
-			// }
-		// }  else if (FD_ISSET(fdi, &fifocheck))  {
-		// 	// Check for fifo input
-		// 	rv = read(fdi, cid, BUFFERSZ);
-		// 	std::cout << cid << std::endl;
-		// }
-
+		/* Polling for both user input and mux fifo */
+		
 		if (poll(ufds, 2, timeout) > 0)  {
 			//std::cout << "Polling" << std::endl;
 			// Checking the stdin
-			if (ufds[0].revents & POLLIN != 0)  {
+			if ((ufds[0].revents & POLLIN) != 0)  {
 
 				if (fgets(line, 1024, stdin))  {
 					if (strncmp(line, "quit", 4) == 0)  {
-						quit_cmd();
+						quit_cmd(fdi);
 						
 					}  else if (strncmp(line, "list", 4) == 0)  {
 						output_list();
 						
 					}
 				}
-			}  else if (ufds[1].revents & POLLIN != 0)  {
+			} if ((ufds[1].revents & POLLIN) != 0)  {
 				// Looking at the multiplexor
-				if (read(ufds[1].fd, cid, BUFFERSZ) > 0)  {
-					std::cout << cid << std::endl;
+				if (read(ufds[1].fd, cid, CIDSZ) > 0)  {
+					// If we were able to read from the selector switch	
 					cidi = atoi(cid);
-					if (mux_switchesi[cidi-1] != 0)  {
-						// Plan is to call a function right here
-						std::cout << "Got in old" << std::endl;
+					if ((cidi == 0) || (cidi > NCLIENT))  {
+						continue;
+					}  else if  (cidi < 0)  {
+						// A client has closed
+						ecid = cidi * -1;
+						// Closing the required pipes
+						close(mux_switchesi[ecid -1]);
+						close(mux_switcheso[ecid - 1]);
+						
+						mux_switchesi[ecid - 1] = 0;
+						mux_switcheso[ecid - 1] = 0;
+						
+					}  else if (mux_switchesi[cidi-1] != 0)  {
+						// Plan is to call the cases function right here
 						server_connect(cid, mux_switchesi[cidi-1], mux_switcheso[cidi-1]);
 					}  else  {
-						std::cout << "Got in new" << std::endl;
+						// A new connection has been made, we are going to open the pipe
 						sprintf(fifo_name, "fifo-%s-0", cid);
 						mux_switchesi[cidi - 1] = open(fifo_name, O_RDONLY);
 						sprintf(fifo_name, "fifo-0-%s", cid);
 						mux_switcheso[cidi - 1] = open(fifo_name, O_WRONLY);
-						// read(mux_switchesi[cidi - 1], buffer, MSGSZ);
 						server_connect(cid, mux_switchesi[cidi-1], mux_switcheso[cidi-1]);
 					}
 				}
@@ -632,7 +562,6 @@ void server_main()  {
 		}
 	}
 
-	//pthread_join(tid1, NULL);
 	close(fdi);
 	return;
 };
@@ -640,13 +569,10 @@ void server_main()  {
 void client_main(int idNumber, char * inputFile)  {
 	// Variable initialization
 	char 						c2s_fifo[10];
-	char						id2ser[BUFFERSZ];
 	char						s2c_fifo[10];
 	csend_t					csend;
 	csend_t					crecieve;
-	int							err;
 	pthread_t				tids;
-	pthread_t				tidr;
 	std::fstream		fp(inputFile);
 	// This function will serve as the main function for the client
 	std::cout << "main: do_client (idNumber = " << idNumber
@@ -660,8 +586,7 @@ void client_main(int idNumber, char * inputFile)  {
 	// Making the fifo file
 	mkfifo(csend.c2s_fifo, 0666);
 	mkfifo(crecieve.c2s_fifo, 0666);
-	// Connecting to the server
-	//send_id2s(idNumber);
+
 	// Fully initialize the struct being sent to the thread
 	csend.inFile = inputFile;
 	csend.cid = idNumber;

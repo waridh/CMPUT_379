@@ -19,10 +19,10 @@ a2p1.o: a2p1.cpp
 	$(CC) $(C_FLAGS) -c $<
 
 a2p2c1: a2p2
-	./a2p2 -c 1 a2p2.data
+	./a2p2 -c 1 a2p2-ex1.dat
 
 a2p2c2: a2p2
-	./a2p2 -c 2 a2p2.data
+	./a2p2 -c 2 a2p2-ex1.dat
 
 a2p2s:	a2p2
 	./a2p2 -s
