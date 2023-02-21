@@ -4,7 +4,7 @@ C_FLAGS = -std=c++11 -g -Wall
 #C_FLAGS2 = -std=c99 -Wall
 
 # The top command is to compile the program and assign an alias for it
-all: a2p1 fmt.man
+all: a2p1 fmt.man a2p2
 
 
 # Testing a2p1
@@ -38,9 +38,9 @@ fmt.man:
 
 # Making a tarball
 tar: clean
-	tar -czvf wongwandanee-a1.tar.gz *
+	tar -czvf wongwandanee-a2.tar.gz a2p1.cpp a2p2.cpp Makefile wongwandanee-a2-typeset.pdf a2p2-ex1.dat a2p2.data
 
 # For cleaning
 .PHONY: clean
 clean:
-	rm -f *.o fmt.man a2p1 a2p2 fifo*
+	rm -f *.o fmt.man a2p1 a2p2 fifo* *.tar.gz
