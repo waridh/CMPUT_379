@@ -139,6 +139,10 @@ void server_poll_struct_set(struct pollfd pollstruct[])  {
   pollstruct[0].fd = STDIN_FILENO;
   pollstruct[0].events = POLLIN;
   pollstruct[0].revents = 0;
+
+  // For the listening socket
+  pollstruct[1].events = POLLIN;
+  pollstruct[1].revents = 0;
 }
 
 //=============================================================================
@@ -172,6 +176,8 @@ void client_main(int argc, char * argv[])  {
 
 	// Socket initialization
   sfd[0] = client_connect(argv[4], port_number);
+
+
 	
 
 
@@ -189,12 +195,19 @@ void client_main(int argc, char * argv[])  {
 void server_main(int argc, char * argv[])  {
   // The main function for the server
 
-  char            buffer[MSGSZ];
-  int             sid = 0;
-  int             sfd;
-  int             port_number;
-  int             timeout = 100;
-  struct pollfd   pollfds[2 + NCLIENT];
+  char                buffer[MSGSZ];
+  int                 connected_clients = 0;
+  int                 connections[NCLIENT] = {0};
+  int                 i;
+  int                 index;
+  int                 sid = 0;
+  int                 sfd;
+  int                 clientfds[NCLIENT];
+  int                 port_number;
+  int                 timeout = 100;
+  struct pollfd       pollfds[2 + NCLIENT];
+  struct sockaddr_in  frominfo;
+  socklen_t           frominfolen;
 
   // Final error check
   if (argc != 3)  {
@@ -208,13 +221,13 @@ void server_main(int argc, char * argv[])  {
   port_number = atoi(argv[2]);
 
   // Setting up the listening socket
-  sfd = server_socket(port_number);
+  pollfds[1].fd = server_socket(port_number);
 
   // Setting up the poll structure
   server_poll_struct_set(pollfds);
 
   while (1)  {
-    // The main loop for server
+    // The main loop for server. Bits of the code was inspired by the eclass
     if (poll(pollfds, 2 + NCLIENT, timeout) > 0)  {
       // Polling for any inputs
       if ((pollfds[0].revents & POLLIN) != 0)  {
@@ -229,6 +242,36 @@ void server_main(int argc, char * argv[])  {
 						
 					}
 				}
+      }  if ((connected_clients < NCLIENT) && (pollfds[1].revents & POLLIN))  {
+        // Taking a new connection
+        std::cout << "Smelled a connection" << std::endl;
+        frominfolen = sizeof(frominfo);
+        // Finding the index to put the thing in
+        for (i = 0; i < NCLIENT; i++)  {
+          // Checking for the first available index slot
+          if (connections[i] == 0)  {
+            connections[i] = 1;
+            index = i;
+          }
+        }
+
+        // Accepting the connection
+        clientfds[index] = accept(
+          pollfds[1].fd,
+          (SA *) &frominfo,
+          &frominfolen);
+        // Adding the connection to the file descriptor list for poll
+        pollfds[2 + index].fd = clientfds[index];
+        pollfds[2 + index].events = POLLIN;
+        pollfds[2 + index].revents = 0;
+        connected_clients++;
+      }
+
+      for (i = 0; i < NCLIENT; i++)  {
+        // The connected socket loop check
+        if ((connections[i] == 1) && (pollfds[2 + i].revents & POLLIN))  {
+          // Checking if there is input in this certain socket
+        }
       }
     }
   }
