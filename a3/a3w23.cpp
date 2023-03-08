@@ -132,6 +132,15 @@ int server_socket(int port_number)  {
   return sfd;
 }
 
+void server_poll_struct_set(struct pollfd pollstruct[])  {
+  // Function is here to make the poll structure work with the server use.
+  
+  // The first fd is for stdin
+  pollstruct[0].fd = STDIN_FILENO;
+  pollstruct[0].events = POLLIN;
+  pollstruct[0].revents = 0;
+}
+
 //=============================================================================
 // Main functions
 
@@ -180,9 +189,12 @@ void client_main(int argc, char * argv[])  {
 void server_main(int argc, char * argv[])  {
   // The main function for the server
 
+  char            buffer[MSGSZ];
   int             sid = 0;
   int             sfd;
   int             port_number;
+  int             timeout = 100;
+  struct pollfd   pollfds[2 + NCLIENT];
 
   // Final error check
   if (argc != 3)  {
@@ -197,6 +209,29 @@ void server_main(int argc, char * argv[])  {
 
   // Setting up the listening socket
   sfd = server_socket(port_number);
+
+  // Setting up the poll structure
+  server_poll_struct_set(pollfds);
+
+  while (1)  {
+    // The main loop for server
+    if (poll(pollfds, 2 + NCLIENT, timeout) > 0)  {
+      // Polling for any inputs
+      if ((pollfds[0].revents & POLLIN) != 0)  {
+
+				if (fgets(buffer, MSGSZ, stdin))  {
+					if (strncmp(buffer, "quit", 4) == 0)  {
+						std::cout << "Quitting" << std::endl;
+            exit(EXIT_SUCCESS);
+						
+					}  else if (strncmp(buffer, "list", 4) == 0)  {
+						std::cout << "List placeholder" << std::endl;
+						
+					}
+				}
+      }
+    }
+  }
 
   return;
 }
