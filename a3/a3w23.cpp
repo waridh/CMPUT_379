@@ -66,6 +66,7 @@ void tokenizer(char * cmdline, std::string * tokens)  {
 
 int client_connect(const char * ip_name, int port_number)  {
   // Connects the client to the server, and returns the file descriptor
+  // Got a lot of these code from the eclass example
   // TODO: Implement IP lookup
   // TODO: Implement number input
   int                   ip_addr;
@@ -75,7 +76,7 @@ int client_connect(const char * ip_name, int port_number)  {
 
   // Get host information
   hostinfo = gethostbyname(ip_name);
-  if (hostinfo == (struct hostent * NULL))  {
+  if (hostinfo == (struct hostent *) NULL)  {
     std::cout << "Could not find the host through gethostbyname()"
     << std::endl;
   };
@@ -84,12 +85,12 @@ int client_connect(const char * ip_name, int port_number)  {
   // TODO: For numerical input
 
   // put the host’s address, and type into a socket structure
-  memset ((char *) &server_addr, 0, sizeof server_addr);
-  memcpy ((char *) &server_addr.sin_addr, hostinfo->h_addr, hostinfo->h_length);
+  memset((char *) &server_addr, 0, sizeof(server_addr));
+  memcpy((char *) &server_addr.sin_addr, hostinfo->h_addr, hostinfo->h_length);
   server_addr.sin_family= AF_INET;
   server_addr.sin_port= htons(port_number);
   // create a socket using TCP
-  if ((sfd= socket(AF_INET, SOCK_STREAM, 0)) < 0)  {
+  if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)  {
     std::cout << "Client failed to create a socket" << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -102,6 +103,35 @@ int client_connect(const char * ip_name, int port_number)  {
   return sfd;
 }
 
+int server_socket(int port_number)  {
+  // Returns the file descriptor
+  int                 sfd;
+  struct sockaddr_in  sin;
+
+  if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)  {
+    // Error checking for failed sockets creation
+    std::cout << "Server failed to create a socket" << std::endl;
+    exit(EXIT_FAILURE); 
+  }
+
+  // Initializing the stuff needed for socket
+  memset((char *) & sin, 0, sizeof(sin));
+  sin.sin_family = AF_INET;
+  sin.sin_addr.s_addr = htonl(INADDR_ANY);
+  sin.sin_port = htons(port_number);
+
+  // Binding the socket as a listener
+  if (bind(sfd, (SA *) &sin, sizeof(sin)) < 0)  {
+    // Could not bind the socket
+    std::cout << "The server failed to bind the managing socket" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  // Setting up amount of listeners
+  listen(sfd, NCLIENT);
+  std::cout << "Server set up" << std::endl;
+  return sfd;
+}
+
 //=============================================================================
 // Main functions
 
@@ -110,30 +140,21 @@ void client_main(int argc, char * argv[])  {
   // TODO: Implement quit on the client
 
   // Initialization
-	char						buffer[MSGSZ];
-	char						msg[MSGSZ];
-	char						ecid[MSGSZ];
   char            ip_name[30];
-	char						packet_type[10];
-	char						pipe_mux[10];
-	char						s2c_fifo[10];
-	char						src_self[10];
-	char						src_server[7] = "server";
-	char						word[MAXWORD];
   int             cid;
-	int							sfd[2];
-  int             ip_addr;
+  int             sfd[2];
   int             port_number;
-	int							switcher = 0;
-	std::fstream		fp(argv[3]);
-	std::string 		line;
-	std::string			tokens[ARGAMT];
 
   // Last input client check
   if (argc != 6)  {
     // not enough arguments
-    std::cout << "Wrong amount of arguments for client, consider following" << " running instructions" << std::endl;
+    std::cout << "Wrong amount of arguments for client, consider following" <<
+    " running instructions" << std::endl;
 
+    exit(EXIT_FAILURE);
+  }  else if (atoi(argv[2]) > NCLIENT)  {
+    // Wrong cid error handling
+    std::cout << "The Client ID provided is out of range" << std::endl;
     exit(EXIT_FAILURE);
   }
   
@@ -148,102 +169,36 @@ void client_main(int argc, char * argv[])  {
 	std::cout << std::endl;
 
 	
-	while (std::getline(fp, line) || 1)  {
-		// Loop for grabbing cmd lines from the client file
-		if ((line[0] == '#')
-		|| (line[0] == '\n')
-		|| (line.size() == 0)
-		|| (line[0] != cid[0])
-		)  {
-			// Skipping if it's a comment, or line is empty, or if it's not for client
-			continue;
-		}
-
-		// For some reason, the id for itself is changing
-		sprintf(src_self, "client:%s", cid);
-		strcpy(buffer, line.c_str());
-		// Switch cases for the file inputs
-		tokenizer(buffer, tokens);
-		
-		if (strncmp(tokens[1].c_str(), "delay", 5) == 0)  {
-			// Delay is placed here to prevent waking up the server.
-			delay_cmd(tokens[2].c_str());
-			
-			continue;
-		}
-
-		if (switcher == 1)  {
-			// Continue to send the select signal to the server so it can do mux
-			write(fdm, cid, CIDSZ);
-		}
-			
-		if (strncmp(tokens[1].c_str(), "gtime", 5) == 0)  {
-			// Sending the gtime function
-			strcpy(packet_type, "GTIME");
-			write(fd, packet_type, MSGSZ);
-			print_transmitted(src_self, packet_type);
-		}  else if (strncmp(tokens[1].c_str(), "put", 3) == 0)  {
-			// This switch handles PUT input.
-			strcpy(packet_type, "PUT");
-			write(fd, packet_type, MSGSZ);
-			write(fd, tokens[2].c_str(), MSGSZ);
-			sprintf(buffer, "(%s: %s)", packet_type, tokens[2].c_str());
-			print_transmitted(src_self, buffer);
-
-		}  else if (strncmp(tokens[1].c_str(), "get", 3) == 0)  {
-			// Sending the get packet over.
-			strcpy(packet_type, "GET");
-			write(fd, packet_type, MSGSZ);
-			write(fd, tokens[2].c_str(), MSGSZ);
-			sprintf(buffer, "(%s: %s)", packet_type, tokens[2].c_str());
-			print_transmitted(src_self, buffer);
-		}  else if (strncmp(tokens[1].c_str(), "delete", 6) == 0)  {
-			// Sending DELETE packet
-			strcpy(packet_type, "DELETE");
-			write(fd, packet_type, MSGSZ);
-			write(fd, tokens[2].c_str(), MSGSZ);
-			sprintf(buffer, "(%s: %s)", packet_type, tokens[2].c_str());
-			print_transmitted(src_self, buffer);
-		}  else if (strncmp(tokens[1].c_str(), "quit", 4) == 0)  {
-			// Informing the server that we are quitting the client. Needs responds
-			strcpy(packet_type, "QUIT");
-			write(fd, packet_type, MSGSZ);
-		}
-
-		read(fdr, packet_type, MSGSZ);
-		if (strncmp(packet_type, "QUIT", 4) == 0)  {
-			// Quit command
-			break;
-		}  else if (strncmp(packet_type, "TIME", 4) == 0)  {
-			// TIME packet
-			read(fdr, word, MSGSZ);
-			sprintf(msg, "(TIME:\t%s)", word);
-			print_received(src_server, msg);
-		}  else if (strncmp(packet_type, "ERROR", 5) == 0)  {
-			// Error handling. Triggered on ERROR packet type
-			read(fdr, word, MSGSZ);
-			sprintf(msg, "(%s: %s)", packet_type, word);
-			print_received(src_server, msg);
-		}  else  {
-			print_received(src_server, packet_type);
-		}
-		std::cout << std::endl;
-		switcher = 1;
-	}
-
-	// Making sure that we have the closing pipenames ready
-	sprintf(s2c_fifo, "fifo-0-%s", cid);
-	sprintf(ecid, "-%s", cid);
-	write(fdm, ecid, MSGSZ);
-	
 	// Closing all the pipes from this end
 	close(sfd[0]);
 
 	// Unlink the client specific pipes
-	unlink(s2c_fifo);
-	unlink(csend->c2s_fifo);
 	sleep(1);
 	pthread_exit(NULL);
+}
+
+void server_main(int argc, char * argv[])  {
+  // The main function for the server
+
+  int             sid = 0;
+  int             sfd;
+  int             port_number;
+
+  // Final error check
+  if (argc != 3)  {
+    // Not the right amount of arguments
+    std::cout << "There isn't the correct amount of arguments for this program"
+    << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  // Initialize the server address and port for the server
+  port_number = atoi(argv[2]);
+
+  // Setting up the listening socket
+  sfd = server_socket(port_number);
+
+  return;
 }
 
 int main(int argc, char * argv[])  {
@@ -255,6 +210,7 @@ int main(int argc, char * argv[])  {
     client_main(argc, argv);
   } else if (argv[1][1] == 's')  {
     // Running the server
+    server_main(argc, argv);
   }
   return 0;
 }

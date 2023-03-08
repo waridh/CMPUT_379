@@ -10,7 +10,7 @@ a3s: a3w23
 	./$< -s 9722
 
 a3c: a3w23
-	./$< -c 3 bach.text 192.168.1.27 9722
+	./$< -c 1 bach.text localhost 9722
 
 a3w23: a3w23.o
 	$(CC) -pthread -o $@ $<
