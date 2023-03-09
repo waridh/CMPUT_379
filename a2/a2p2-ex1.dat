@@ -5,14 +5,32 @@
 
 1 gtime
 1 put index1.html
+{
+
+}
 1 put img1.jpg
+{
+
+}
 1 put video1.mp4
+{
+
+}
 1 delay 2500
 
 2 gtime
 2 put index2.html
+{
+
+}
 2 put img2.jpg
+{
+
+}
 2 put video2.mp4
+{
+  
+}
 2 delay 1500
 
 1 gtime
