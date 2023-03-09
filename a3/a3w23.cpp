@@ -194,6 +194,10 @@ int confirm_connection_server(int fd)  {
 
 }
 
+void client_transmission()  {
+  // Sending and recieving the thing without blocking
+}
+
 //=============================================================================
 // Main functions
 
