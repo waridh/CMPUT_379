@@ -27,6 +27,7 @@
 #define   MSGSZ         64
 #define   NCLIENT       3
 #define   NOBJECT       16
+#define   PUTSZ         81
 #define   SA            struct sockaddr
 #define   TOKSZ         3
 
@@ -61,10 +62,11 @@ void user_inpt_err(int argc, char * argv[])  {
 void delay_cmd(std::string delaytime)  {
   // Blocks the client for a certain time in milliseconds
   int         converted_time = stoi(delaytime);
+  std::cout << std::endl;
 	std::cout << "*** Entering a delay period of " << delaytime
 			<< " msec" << std::endl;	
 	usleep(converted_time*1000);
-	std::cout << "*** Exiting delay period" << std::endl <<std::endl;
+	std::cout << "*** Exiting delay period" << std::endl;
   return;
 }
 
@@ -98,8 +100,14 @@ double gtime_cmd()  {
 	return seconds_passed;
 }
 
-int put_cmd(char * cid, char * item)  {
-	/* This function adds an object to the list*/
+int put_cmd_client()  {
+  /* Since the object in put now has content, we need a function that can deal
+  with it*/
+}
+
+int put_cmd_server(char * cid, char * item)  {
+	/* This function adds an object to the list. Updated to match with the new
+  requisites */
 	std::string				item_s = item;
 	int								cidi = atoi(cid);
 	if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
@@ -153,7 +161,7 @@ int delete_cmd(char * cid, char * item)  {
 void send_2_items(int fd, char * msg1, char * msg2, char * src)  {
   // When we are sending two things to the file descriptor
   write(fd, msg1, sizeof(msg1));
-  usleep(10);
+  usleep(10);  // I needed to add this so that the process doesn't break socket
   write(fd, msg2, sizeof(msg2));
 
   std::cout << "Transmitted (src= " << src << ") "
@@ -167,14 +175,11 @@ void client_reciever(int fd, char * src)  {
   char            buffer[MAXWORD];
   char            buffer2[MAXWORD];
 
-  std::cout << "Got in the reciever" << std::endl;
   // Getting the first packet
   read(fd, buffer, sizeof(buffer));
-  std::cout << buffer <<std::endl;
   read(fd, buffer2, sizeof(buffer2));
 
-  std::cout << "read the things" << std::endl;
-  std::cout << buffer2 << std::endl;
+  
 
   if (strncmp(buffer2, "UNLOVED", 7) == 0)  {
     // This is the message for no message
@@ -182,7 +187,42 @@ void client_reciever(int fd, char * src)  {
     return;
   }
   std::cout << "Received (src= " << src << ") " << "( " 
-  << buffer << ", " << buffer2 << " )" << std::endl;
+  << buffer << ": " << buffer2 << " )" << std::endl;
+  // If the server wants the client to quit
+  if (strncmp(buffer, "QUIT", 4) == 0)  {
+    // The QUIT packet was sent back
+    if (strncmp(buffer2, "ALCONN", 6) == 0)  {
+      // The same client ID was already connected
+      std::cout << "A client with this ID has already been connected"
+      << std::endl;
+      std::cout << "Please try again later" << std::endl;
+      quit_cmd(fd);
+    }  else if (strncmp(buffer2, "TOOLRG", 6) == 0)  {
+      // This client ID is above the limit size
+      std::cout << "This client ID is above the maximum allowed" << std::endl;
+      std::cout << "Please try again later" << std::endl;
+      quit_cmd(fd);
+    }  else  {
+      // I guess the server just wants the client to quit? Implementing it.
+      quit_cmd(fd);
+    }
+  }
+
+  return;
+}
+
+void server_receiver_print(int cid, char * packet, char * msg)  {
+  // Outputting the received packet from the client
+
+  std::cout << std::endl;
+  if (strncmp(msg, "UNLOVED", 7) == 0)  {
+    // For when the packet does not have a msg
+    std::cout << "Received (src= client:" << cid << ") " << packet << std::endl;
+    return;
+  }
+
+  std::cout << "Received (src= client:" << cid << ") "
+  << "(" << packet << ": " << msg << ")" << std::endl;
   return;
 }
 
@@ -331,7 +371,7 @@ int confirm_connection_server(int fd)  {
 
 void client_transmitter(int fd, std::string * tokens)  {
   // Sending and recieving the thing without blocking
-  char        buffer[MSGSZ];
+  char        buffer[MAXWORD];
   char        * fromwho = "server";
   if (tokens[1] == "delay")  {
     // First check if for delay
@@ -343,10 +383,16 @@ void client_transmitter(int fd, std::string * tokens)  {
     write(fd, buffer, sizeof(buffer));
     // Using the gtime function, we send the packet
     client_reciever(fd, fromwho);
+  }  else if (tokens[1] == "quit")  {
+    // We want to send to the server so that it knows we want to appropriately
+    // quit
+    strcpy(buffer, "QUIT");
+    write(fd, buffer, sizeof(buffer));
+    client_reciever(fd, fromwho);
   }
 }
 
-void server_receiver(int fd, char * inpacket)  {
+void server_receiver(int cid, int fd, char * inpacket)  {
   // This function will recieve the packets from the client
   char        buffer[MAXWORD];
   char        packet[MAXWORD];
@@ -357,6 +403,7 @@ void server_receiver(int fd, char * inpacket)  {
 
   if (strncmp(inpacket, "GTIME", 5) == 0)  {
     // Checking for GTIME first as it is easier to implement
+    server_receiver_print(cid, inpacket, "UNLOVED");
     gtimer = gtime_cmd();  // Getting the time since program began
     // Making output packet and msg
     strcpy(packet, "TIME");
@@ -495,6 +542,10 @@ void server_main(int argc, char * argv[])  {
 				if (fgets(buffer, MSGSZ, stdin))  {
 					if (strncmp(buffer, "quit", 4) == 0)  {
 						std::cout << "Quitting" << std::endl;
+            for (int i = 0; i < 2 + NCLIENT; i++) {
+              // Closing all the file descriptors from this side
+              close(pollfds[i].fd);
+            }
             exit(EXIT_SUCCESS);
 						
 					}  else if (strncmp(buffer, "list", 4) == 0)  {
@@ -541,14 +592,26 @@ void server_main(int argc, char * argv[])  {
           // Checking if there is input in this certain socket
           len = read(pollfds[2 + i].fd, buffer, sizeof(buffer));
           if (len == 0)  {
-            // TODO: Implement the client number that we lost connection with
+            // When we lose connection with the client
             std::cout << "lost connection to client " << connections[i]
             << std::endl;
             connections[i] = 0;
             continue;
+          }  else if (strncmp(buffer, "QUIT", 4) == 0)  {
+            // If the client sends the quit packet to the server
+            
+            write(pollfds[2 + i].fd, buffer, sizeof(buffer));
+            strcpy(buffer, "UNLOVED");
+            write(pollfds[2 + i].fd, buffer, sizeof(buffer));
+            std::cout << std::endl;
+            std::cout << "client " << connections[i] << " is disconnected"
+            << std::endl;
+
+            connections[i] = 0;
+            continue;
           }
           /* Receives and sends back the appropriate packet*/
-          server_receiver(pollfds[2 + i].fd, buffer);
+          server_receiver(connections[i], pollfds[2 + i].fd, buffer);
         }
       }
     }
