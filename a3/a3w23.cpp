@@ -179,7 +179,7 @@ void client_reciever(int fd, char * src)  {
   read(fd, buffer, sizeof(buffer));
   read(fd, buffer2, sizeof(buffer2));
 
-  
+  std::cout << std::endl;
 
   if (strncmp(buffer2, "UNLOVED", 7) == 0)  {
     // This is the message for no message
