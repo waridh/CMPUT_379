@@ -23,6 +23,7 @@
 
 //=============================================================================
 // Defining the sizes
+#define   CONTLINE      3
 #define   MAXWORD       32
 #define   MSGSZ         64
 #define   NCLIENT       3
@@ -369,10 +370,14 @@ int confirm_connection_server(int fd)  {
 
 }
 
-void client_transmitter(int fd, std::string * tokens)  {
+void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   // Sending and recieving the thing without blocking
   char        buffer[MAXWORD];
+  char        buffer2[MAXWORD];
   char        * fromwho = "server";
+  std::string contents[CONTLINE];
+  std::string oneline;
+
   if (tokens[1] == "delay")  {
     // First check if for delay
     delay_cmd(tokens[2]);
@@ -389,6 +394,21 @@ void client_transmitter(int fd, std::string * tokens)  {
     strcpy(buffer, "QUIT");
     write(fd, buffer, sizeof(buffer));
     client_reciever(fd, fromwho);
+  }  else if (tokens[1] == "put")  {
+    /* Handling the put command. Since we also need the name of the object, we
+    will just send this into another function*/
+    while (std::getline(fp, oneline))  {
+      // Grabbing the contents of the thing
+      if (oneline == "}")  {
+        break;
+      }
+      // We now need to collect the thing
+      // TODO: Make the formatting more correct soon
+      std::cout << oneline << std::endl;
+
+
+
+    }
   }
 }
 
@@ -424,6 +444,8 @@ void client_sendcmds(int fd, int cid, char * filename)  {
   /* This command will read from the specified file and then send those to the
   fd specified. */
   char            buff0[MAXWORD];
+  char            buffer[MAXWORD];
+  char            filecont[CONTLINE][PUTSZ];
   std::fstream   fp(filename);
   std::string     cmdline;
   std::string     tokens[TOKSZ];
@@ -441,8 +463,9 @@ void client_sendcmds(int fd, int cid, char * filename)  {
     }
     strcpy(buff0, cmdline.c_str());
     tokenizer(buff0, tokens);
+    strcpy(buffer, tokens[1].c_str());
     std::cout << cmdline << std::endl;
-    client_transmitter(fd, tokens);
+    client_transmitter(fd, tokens, fp);
   }
 
   return;
@@ -606,6 +629,8 @@ void server_main(int argc, char * argv[])  {
             std::cout << std::endl;
             std::cout << "client " << connections[i] << " is disconnected"
             << std::endl;
+
+            close(pollfds[2 + i].fd);
 
             connections[i] = 0;
             continue;
