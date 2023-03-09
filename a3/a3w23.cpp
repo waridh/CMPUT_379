@@ -153,6 +153,7 @@ int delete_cmd(char * cid, char * item)  {
 void send_2_items(int fd, char * msg1, char * msg2, char * src)  {
   // When we are sending two things to the file descriptor
   write(fd, msg1, sizeof(msg1));
+  usleep(10);
   write(fd, msg2, sizeof(msg2));
 
   std::cout << "Transmitted (src= " << src << ") "
@@ -169,10 +170,10 @@ void client_reciever(int fd, char * src)  {
   std::cout << "Got in the reciever" << std::endl;
   // Getting the first packet
   read(fd, buffer, sizeof(buffer));
+  std::cout << buffer <<std::endl;
   read(fd, buffer2, sizeof(buffer2));
 
   std::cout << "read the things" << std::endl;
-  std::cout << buffer << std::endl;
   std::cout << buffer2 << std::endl;
 
   if (strncmp(buffer2, "UNLOVED", 7) == 0)  {
