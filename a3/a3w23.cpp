@@ -28,6 +28,7 @@
 #define   NCLIENT       3
 #define   NOBJECT       16
 #define   SA            struct sockaddr
+#define   TOKSZ         3
 
 // Error checker for user input
 void user_inpt_err(int argc, char * argv[])  {
@@ -145,8 +146,81 @@ void server_poll_struct_set(struct pollfd pollstruct[])  {
   pollstruct[1].revents = 0;
 }
 
+int confirm_connection_client(int fd, int cid)  {
+  // This function sends HELLO and the cid Returns of error
+  char            buffer[MAXWORD];
+  int             len;
+
+  // Writing the HELLO packet
+  strcpy(buffer, "HELLO");
+  len = write(fd, buffer, sizeof(buffer));
+  if (len == 0)  {
+    std::cout << "Couldn't write HELLO packet. Quitting" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  // Writing cid
+  sprintf(buffer, "%d", cid);
+  len = write(fd, buffer, sizeof(buffer));
+  // Waiting for confirmation from server
+  len = read(fd, buffer, sizeof(buffer));
+  if (strncmp(buffer, "OK", 2) == 0)  {
+    // Recieved the OK packet back from the server
+    std::cout << "Recieved OK packet from server" << std::endl;
+  }
+  return 0;
+}
+
+int confirm_connection_server(int fd)  {
+  // The server making sure the client sends a HELLO packet. Returns the CID
+  char            buffer[MAXWORD];
+  int             cid;
+  int             len;
+  // Reading buffer and then checking if it is appropriate
+  len = read(fd, buffer, sizeof(buffer));
+  if (strncmp(buffer, "HELLO", 5) == 0)  {
+    // Checking packet
+    len = read(fd, buffer, sizeof(buffer));
+    cid = atoi(buffer);
+    std::cout << "Recieved the HELLO packet from client " << cid << "."
+    << std::endl;
+    sprintf(buffer, "OK");
+    write(fd, buffer, sizeof(buffer));
+    return cid;
+  }  else  {
+    // Did not get the HELLO packet
+    std::cout << "Did not recieve the HELLO packet, disconnecting" << std::endl;
+    return -1;
+  }
+
+}
+
 //=============================================================================
 // Main functions
+
+void client_sendcmds(int fd, int cid, char * filename)  {
+  /* This command will read from the specified file and then send those to the
+  fd specified. */
+  std::fstream   fp(filename);
+  std::string     cmdline;
+  std::string     tokens[TOKSZ];
+  std::cout << filename << std::endl;
+  while (std::getline(fp, cmdline))  {
+		// Loop for grabbing cmd lines from the client file
+    if (
+      (cmdline[0] == '#')
+      || (cmdline[0] == '\n')
+      || (cmdline.size() == 0)
+      || (cmdline[0] != '0' + cid)
+    )  {
+      // Skipping if it's a comment, or line is empty, or if it's not for client
+      continue;
+    }
+
+    std::cout << cmdline << std::endl;
+  }
+
+  return;
+}
 
 void client_main(int argc, char * argv[])  {
   /* This is the main function for client */
@@ -154,9 +228,10 @@ void client_main(int argc, char * argv[])  {
 
   // Initialization
   char            ip_name[30];
+  char            buffer[MAXWORD];
   int             cid;
-  int             sfd[2];
   int             port_number;
+  struct pollfd   pollfds[2];
 
   // Last input client check
   if (argc != 6)  {
@@ -170,22 +245,25 @@ void client_main(int argc, char * argv[])  {
     std::cout << "The Client ID provided is out of range" << std::endl;
     exit(EXIT_FAILURE);
   }
+
+  // Setting up the pollfd
+  server_poll_struct_set(pollfds);
   
-  cid = atoi(argv[1]);
+  cid = atoi(argv[2]);
   port_number = atoi(argv[5]);
 
 	// Socket initialization
-  sfd[0] = client_connect(argv[4], port_number);
+  pollfds[1].fd = client_connect(argv[4], port_number);
 
+  // Confirming connections with the server 
+  confirm_connection_client(pollfds[1].fd, cid);
 
-	
-
-
-	std::cout << std::endl;
+  // Need to loop and read the commands from the file and send it to the socket
+  client_sendcmds(pollfds[1].fd, cid, argv[3]);
 
 	
 	// Closing all the pipes from this end
-	close(sfd[0]);
+	close(pollfds[1].fd);
 
 	// Unlink the client specific pipes
 	sleep(1);
@@ -195,11 +273,14 @@ void client_main(int argc, char * argv[])  {
 void server_main(int argc, char * argv[])  {
   // The main function for the server
 
-  char                buffer[MSGSZ];
+  char                buffer[MAXWORD];
+  int                 buffd;
+  int                 cid;
   int                 connected_clients = 0;
   int                 connections[NCLIENT] = {0};
   int                 i;
   int                 index;
+  int                 len;
   int                 sid = 0;
   int                 sfd;
   int                 clientfds[NCLIENT];
@@ -244,33 +325,51 @@ void server_main(int argc, char * argv[])  {
 				}
       }  if ((connected_clients < NCLIENT) && (pollfds[1].revents & POLLIN))  {
         // Taking a new connection
-        std::cout << "Smelled a connection" << std::endl;
         frominfolen = sizeof(frominfo);
         // Finding the index to put the thing in
-        for (i = 0; i < NCLIENT; i++)  {
-          // Checking for the first available index slot
-          if (connections[i] == 0)  {
-            connections[i] = 1;
-            index = i;
-          }
-        }
 
         // Accepting the connection
-        clientfds[index] = accept(
+        buffd = accept(
           pollfds[1].fd,
           (SA *) &frominfo,
-          &frominfolen);
+          &frominfolen
+        );
+
+        cid = confirm_connection_server(buffd);  // Pain
+        if (connections[cid - 1] != 0)  {
+          // There is already a client with this ID
+          std::cout << "A connection with the same client ID already exists"
+          << std::endl;
+
+          // Need to forget about this cid, so I guess I will jsut continue the
+          // loop
+          continue;
+        }  else  {
+          // Setting the fd to this array too
+          connections[cid - 1] = cid;
+        }
+
         // Adding the connection to the file descriptor list for poll
-        pollfds[2 + index].fd = clientfds[index];
-        pollfds[2 + index].events = POLLIN;
-        pollfds[2 + index].revents = 0;
+        pollfds[1 + cid].fd = buffd;
+        pollfds[1 + cid].events = POLLIN;
+        pollfds[1 + cid].revents = 0;
         connected_clients++;
       }
 
       for (i = 0; i < NCLIENT; i++)  {
         // The connected socket loop check
-        if ((connections[i] == 1) && (pollfds[2 + i].revents & POLLIN))  {
+        if ((connections[i] != 0) && (pollfds[2 + i].revents & POLLIN))  {
           // Checking if there is input in this certain socket
+          len = read(pollfds[2 + i].fd, buffer, sizeof(buffer));
+          if (len == 0)  {
+            // TODO: Implement the client number that we lost connection with
+            std::cout << "lost connection to client " << connections[i]
+            << std::endl;
+            connections[i] = 0;
+            continue;
+          }
+          std::cout << buffer << std::endl;
+          write(pollfds[2 + i].fd, buffer, sizeof(buffer));
         }
       }
     }

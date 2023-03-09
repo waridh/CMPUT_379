@@ -223,7 +223,7 @@ void * client_cmd_send(void * arg)  {
 	int 						fd;
 	int							fdr;
 	int							switcher = 0;
-	std::fstream		fp(csend->inFile);
+	std::fstream   fp(csend->inFile);
 	std::string 		line;
 	std::string			tokens[ARGAMT];
 	

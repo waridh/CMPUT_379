@@ -1,0 +1,27 @@
+# Transactions file for 2 clients
+# a2p2 -s
+# a2p2 -c 1 a2p2-ex1.dat
+# a2p2 -c 2 a2p2-ex1.dat
+
+1 gtime
+1 put index1.html
+1 put img1.jpg
+1 put video1.mp4
+1 delay 2500
+
+2 gtime
+2 put index2.html
+2 put img2.jpg
+2 put video2.mp4
+2 delay 1500
+
+1 gtime
+1 get index2.html
+1 get index3.html
+1 delete img2.jpg
+1 delay 3000
+1 gtime
+1 quit
+
+2 gtime
+2 quit
