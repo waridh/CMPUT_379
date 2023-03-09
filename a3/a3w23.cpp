@@ -80,7 +80,7 @@ void gtime_client(int fd)  {
   write(fd, "GTIME", sizeof("GTIME"));
 }
 
-double gtime_cmd(int fd)  {
+double gtime_cmd()  {
 	/* Gets the time since start. Takes advantage of times()*/
 	clock_t						current_time = times(NULL);
 	clock_t						c_seconds_passed = current_time - start;
@@ -149,6 +149,41 @@ int delete_cmd(char * cid, char * item)  {
 
 //=============================================================================
 // Utilities
+
+void send_2_items(int fd, char * msg1, char * msg2, char * src)  {
+  // When we are sending two things to the file descriptor
+  write(fd, msg1, sizeof(msg1));
+  write(fd, msg2, sizeof(msg2));
+
+  std::cout << "Transmitted (src= " << src << ") "
+  << "( " << msg1 << ", " << msg2 << ")" << std::endl;
+
+  return;
+}
+
+void client_reciever(int fd, char * src)  {
+  // Collects the response from the server
+  char            buffer[MAXWORD];
+  char            buffer2[MAXWORD];
+
+  std::cout << "Got in the reciever" << std::endl;
+  // Getting the first packet
+  read(fd, buffer, sizeof(buffer));
+  read(fd, buffer2, sizeof(buffer2));
+
+  std::cout << "read the things" << std::endl;
+  std::cout << buffer << std::endl;
+  std::cout << buffer2 << std::endl;
+
+  if (strncmp(buffer2, "UNLOVED", 7) == 0)  {
+    // This is the message for no message
+    std::cout << "Received (src= " << src << ") " << buffer << std::endl;
+    return;
+  }
+  std::cout << "Received (src= " << src << ") " << "( " 
+  << buffer << ", " << buffer2 << " )" << std::endl;
+  return;
+}
 
 void tokenizer(char * cmdline, std::string * tokens)  {
   /* Goal here is to tokenize the c string input*/
@@ -295,22 +330,40 @@ int confirm_connection_server(int fd)  {
 
 void client_transmitter(int fd, std::string * tokens)  {
   // Sending and recieving the thing without blocking
+  char        buffer[MSGSZ];
+  char        * fromwho = "server";
   if (tokens[1] == "delay")  {
     // First check if for delay
     delay_cmd(tokens[2]);
     return;
   }  else if (tokens[1] == "gtime")  {
-    // Asking for the time since server began
+    // Asking for the time since server began 
+    strcpy(buffer, "GTIME");
+    write(fd, buffer, sizeof(buffer));
+    // Using the gtime function, we send the packet
+    client_reciever(fd, fromwho);
   }
 }
 
-void server_reciever(int fd)  {
+void server_receiver(int fd, char * inpacket)  {
   // This function will recieve the packets from the client
   char        buffer[MAXWORD];
+  char        packet[MAXWORD];
+  char        msgout[MAXWORD];
+  char        * src = "server";
+  double      gtimer;
   int         len;
 
-  len = read(fd, buffer, sizeof(buffer));
+  if (strncmp(inpacket, "GTIME", 5) == 0)  {
+    // Checking for GTIME first as it is easier to implement
+    gtimer = gtime_cmd();  // Getting the time since program began
+    // Making output packet and msg
+    strcpy(packet, "TIME");
+    sprintf(msgout, "%0.2f", gtimer);
+    send_2_items(fd, packet, msgout, src);
+  }
 
+  return;
 }
 
 
@@ -493,8 +546,8 @@ void server_main(int argc, char * argv[])  {
             connections[i] = 0;
             continue;
           }
-          std::cout << buffer << std::endl;
-          write(pollfds[2 + i].fd, buffer, sizeof(buffer));
+          /* Receives and sends back the appropriate packet*/
+          server_receiver(pollfds[2 + i].fd, buffer);
         }
       }
     }
