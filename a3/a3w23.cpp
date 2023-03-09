@@ -30,6 +30,14 @@
 #define   SA            struct sockaddr
 #define   TOKSZ         3
 
+//=============================================================================
+// Global variables
+
+clock_t                                 start = times(NULL); // For gtime
+int                                     list_count = 0; // Counting list
+static long                             clktck = 0; // Clk work
+std::map<int, std::set<std::string>>    obj_list; // We are holding the objs
+
 // Error checker for user input
 void user_inpt_err(int argc, char * argv[])  {
   // Checking what is wrong
@@ -48,6 +56,96 @@ void user_inpt_err(int argc, char * argv[])  {
   }
 
 }
+//=============================================================================
+// Commands
+void delay_cmd(std::string delaytime)  {
+  // Blocks the client for a certain time in milliseconds
+  int         converted_time = stoi(delaytime);
+	std::cout << "*** Entering a delay period of " << delaytime
+			<< " msec" << std::endl;	
+	usleep(converted_time*1000);
+	std::cout << "*** Exiting delay period" << std::endl <<std::endl;
+  return;
+}
+
+void quit_cmd(int fd)  {
+	/* This is for when the server sends the quit cmd back to the client*/
+	std::cout << "quitting" << std::endl;
+	close(fd);
+	exit(EXIT_SUCCESS);
+}
+
+void gtime_client(int fd)  {
+  // Sending and recieving the gtime command
+  write(fd, "GTIME", sizeof("GTIME"));
+}
+
+double gtime_cmd(int fd)  {
+	/* Gets the time since start. Takes advantage of times()*/
+	clock_t						current_time = times(NULL);
+	clock_t						c_seconds_passed = current_time - start;
+	double						seconds_passed;
+
+	if (clktck == 0)  {
+		clktck = sysconf(_SC_CLK_TCK);
+		if (clktck < 0)  {
+			// Something broke
+			std::cout << "sysconf error" << std::endl;
+			exit(EXIT_FAILURE);
+		}
+	}
+	seconds_passed = c_seconds_passed / (double) clktck;
+	return seconds_passed;
+}
+
+int put_cmd(char * cid, char * item)  {
+	/* This function adds an object to the list*/
+	std::string				item_s = item;
+	int								cidi = atoi(cid);
+	if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
+		// Already exists, return an error
+		return -1;
+	}  else  {
+		obj_list[cidi].insert(item_s);
+		return 0;
+	}
+}
+
+int get_cmd(char * cid, char * item)  {
+	/* This function retrieves the object from the list*/
+	std::string				item_s = item;
+	for (auto i : obj_list)  {
+		/* Need to look at all the objects what was put here by all clients*/
+		if (i.second.find(item_s) != i.second.end())  {
+			/* If the object exists, then do normal return*/
+			return 0;
+		}
+	}
+	/* The object does not exist in the thing, return error*/
+	return -1;
+}
+
+int delete_cmd(char * cid, char * item)  {
+	/* This function will delete the object that is stored*/
+	std::string				item_s = item;
+	int								cidi = atoi(cid);
+	if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
+		/* If the object belongs to client, proceed as intended*/
+		obj_list[cidi].erase(item_s);
+		return 0;
+	}
+	for (auto i : obj_list)  {
+		/* Need to look at all the objects what was put here by all clients*/
+		if (i.first == cidi)  {
+			continue;
+		}  else if (i.second.find(item_s) != i.second.end())  {
+			/* If the object exists, but not owned by client*/
+			return -2;
+		}
+	}
+	/* The object does not exist in the thing*/
+	return -1;
+}
 
 //=============================================================================
 // Utilities
@@ -57,6 +155,7 @@ void tokenizer(char * cmdline, std::string * tokens)  {
   char							WSPACE[] = "\t ";
   char *						buffer = strtok(cmdline, WSPACE);
   int								count = 0;
+
   while (buffer != NULL)  {
     // Putting strings down
     tokens[count] = buffer;
@@ -194,9 +293,28 @@ int confirm_connection_server(int fd)  {
 
 }
 
-void client_transmission()  {
+void client_transmitter(int fd, std::string * tokens)  {
   // Sending and recieving the thing without blocking
+  if (tokens[1] == "delay")  {
+    // First check if for delay
+    delay_cmd(tokens[2]);
+    return;
+  }  else if (tokens[1] == "gtime")  {
+    // Asking for the time since server began
+  }
 }
+
+void server_reciever(int fd)  {
+  // This function will recieve the packets from the client
+  char        buffer[MAXWORD];
+  int         len;
+
+  len = read(fd, buffer, sizeof(buffer));
+
+}
+
+
+
 
 //=============================================================================
 // Main functions
@@ -204,6 +322,7 @@ void client_transmission()  {
 void client_sendcmds(int fd, int cid, char * filename)  {
   /* This command will read from the specified file and then send those to the
   fd specified. */
+  char            buff0[MAXWORD];
   std::fstream   fp(filename);
   std::string     cmdline;
   std::string     tokens[TOKSZ];
@@ -219,8 +338,10 @@ void client_sendcmds(int fd, int cid, char * filename)  {
       // Skipping if it's a comment, or line is empty, or if it's not for client
       continue;
     }
-
+    strcpy(buff0, cmdline.c_str());
+    tokenizer(buff0, tokens);
     std::cout << cmdline << std::endl;
+    client_transmitter(fd, tokens);
   }
 
   return;
