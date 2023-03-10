@@ -6,7 +6,9 @@
 1 gtime
 1 put index1.html
 {
-
+  index1.html: I wish she'd notice when I'm gone
+  index1.html: Sadge
+  index1.html: Don't want to be alone
 }
 1 put img1.jpg
 {
@@ -14,7 +16,7 @@
 }
 1 put video1.mp4
 {
-
+  video1.mp4: I'm all alone. I don't know dude
 }
 1 delay 2500
 

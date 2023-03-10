@@ -101,9 +101,48 @@ double gtime_cmd()  {
 	return seconds_passed;
 }
 
-int put_cmd_client()  {
+int put_cmd_client(std::fstream &fp)  {
   /* Since the object in put now has content, we need a function that can deal
   with it*/
+  char            WSPACE[] = "\t ";
+  char            * buffer;
+  char            conbuff[PUTSZ + MAXWORD];
+  int             linecount;
+  std::string     oneline;
+
+  std::cout << std::endl;
+  while (std::getline(fp, oneline))  {
+    // Grabbing the contents of the thing
+    if (oneline == "}")  {
+      break;
+    }  else if (
+      (oneline[0] == '#')
+      || (oneline[0] == '\n')
+      || (oneline.size() == 0)
+      
+    )  {
+      // Ignoring the unimportant lines
+      continue;
+    }  else if (
+      (oneline[0] == '{')
+    )  {
+      linecount = 0;
+      continue;
+    }  else  {
+      // The plan is to use strtok to get only the line.
+      strcpy(conbuff, oneline.c_str());
+      buffer = strtok(conbuff, WSPACE);
+      
+
+      std::cout << buffer << std::endl;
+      buffer = strtok(NULL, "\n");
+      std::cout << buffer << std::endl;
+      std::cout << oneline << std::endl;
+    }
+    // We now need to collect the thing
+    // TODO: Make the formatting more correct soon
+    linecount++;
+  }
 }
 
 int put_cmd_server(char * cid, char * item)  {
@@ -376,7 +415,6 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   char        buffer2[MAXWORD];
   char        * fromwho = "server";
   std::string contents[CONTLINE];
-  std::string oneline;
 
   if (tokens[1] == "delay")  {
     // First check if for delay
@@ -397,18 +435,8 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   }  else if (tokens[1] == "put")  {
     /* Handling the put command. Since we also need the name of the object, we
     will just send this into another function*/
-    while (std::getline(fp, oneline))  {
-      // Grabbing the contents of the thing
-      if (oneline == "}")  {
-        break;
-      }
-      // We now need to collect the thing
-      // TODO: Make the formatting more correct soon
-      std::cout << oneline << std::endl;
+    put_cmd_client(fp);
 
-
-
-    }
   }
 }
 
