@@ -60,6 +60,21 @@ void user_inpt_err(int argc, char * argv[])  {
 }
 
 //=============================================================================
+// Utilities 1
+void send_2_items(int fd, char * msg1, char * msg2, char * src)  {
+  // When we are sending two things to the file descriptor
+  write(fd, msg1, sizeof(msg1));
+  usleep(50);  // I needed to add this so that the process doesn't break socket
+  write(fd, msg2, sizeof(msg2));
+
+  std::cout << "Transmitted (src= " << src << ") "
+  << "( " << msg1 << ", " << msg2 << ")" << std::endl;
+
+  return;
+}
+
+
+//=============================================================================
 // Commands
 void delay_cmd(std::string delaytime)  {
   // Blocks the client for a certain time in milliseconds
@@ -107,6 +122,7 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   with it*/
   char            WSPACE[] = "\t ";
   char            * buffer;
+  char            buffer2[MAXWORD];
   char            conbuff[PUTSZ + MAXWORD];
   char            sendingcont[CONTLINE][PUTSZ];
   int             i;
@@ -151,8 +167,12 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
     }
   }
   // Now we want to write the packet and message to the thing
-  strcpy(buffer, objname.c_str());
-  send_2_items(fd, "PUT", buffer, cid);
+  strcpy(buffer2, objname.c_str());
+
+  write(fd, "PUT", sizeof("PUT"));
+  write(fd, buffer2, sizeof(buffer2));
+
+  // send_2_items(fd, "PUT", buffer, cid);
   for (i = 0; i < linecount; i++)  {
     // Thingy
     std::cout << sendingcont[i] << std::endl;
@@ -216,17 +236,7 @@ int delete_cmd(char * cid, char * item)  {
 //=============================================================================
 // Utilities
 
-void send_2_items(int fd, char * msg1, char * msg2, char * src)  {
-  // When we are sending two things to the file descriptor
-  write(fd, msg1, sizeof(msg1));
-  usleep(10);  // I needed to add this so that the process doesn't break socket
-  write(fd, msg2, sizeof(msg2));
 
-  std::cout << "Transmitted (src= " << src << ") "
-  << "( " << msg1 << ", " << msg2 << ")" << std::endl;
-
-  return;
-}
 
 void client_reciever(int fd, char * src)  {
   // Collects the response from the server
@@ -477,6 +487,7 @@ void server_receiver(int cid, int fd, char * inpacket)  {
     sprintf(msgout, "%0.2f", gtimer);
     send_2_items(fd, packet, msgout, src);
   }  else if (strncmp(inpacket, "PUT", 3) == 0)  {
+    std::cout << "GOT INTO PUT" << std::endl;
     put_cmd_server(cid, fd);
   }
 
