@@ -170,6 +170,7 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   strcpy(buffer2, objname.c_str());
 
   write(fd, "PUT", sizeof("PUT"));
+  std::cout << "This is buffer2: "<< buffer2 << std::endl;
   write(fd, buffer2, sizeof(buffer2));
 
   // send_2_items(fd, "PUT", buffer, cid);
@@ -185,7 +186,7 @@ int put_cmd_server(int cid, int fd)  {
   char              buffer[MAXWORD];
 
   read(fd, buffer, sizeof(buffer));
-  std::cout << buffer << std::endl;
+  std::cout << "This is buffer2: " << buffer << std::endl;
 	// std::string				item_s = item;
 	// int								cidi = atoi(cid);
 	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
