@@ -1,0 +1,50 @@
+# Transactions file for 2 clients
+# a3w23 -s
+# a3w23 -c 1 a2p2-ex1.dat
+# a3w23 -c 2 a2p2-ex1.dat
+
+1 gtime
+1 put index1.html
+{
+  index1.html: line 1
+  index1.html: line 2
+}
+1 put img1.jpg
+{
+  img1.jpg: line 1
+}
+1 put video1.mp4
+{
+  video1.mp4: line 1
+}
+1 delay 2500
+
+2 gtime
+2 put index2.html
+{
+  index2.html: line 1
+}
+2 put img2.jpg
+{
+  img2.jpg: line 1
+}
+2 put video2.mp4
+{
+  video2.mp4: line 1
+}
+2 delay 1500
+
+1 gtime
+1 get index2.html
+1 get index3.html
+1 delete img2.jpg
+1 delay 3000
+
+2 get index1.html
+2 delay 3000
+
+1 gtime
+1 quit
+
+2 gtime
+2 quit

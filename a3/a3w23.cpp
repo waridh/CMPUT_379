@@ -38,7 +38,8 @@
 clock_t                                 start = times(NULL); // For gtime
 int                                     list_count = 0; // Counting list
 static long                             clktck = 0; // Clk work
-std::map<int, std::set<std::string>>    obj_list; // We are holding the objs
+std::map<int, std::string[CONTLINE]>    obj_list[NCLIENT];
+// We are holding the objs
 
 // Error checker for user input
 void user_inpt_err(int argc, char * argv[])  {
@@ -56,8 +57,8 @@ void user_inpt_err(int argc, char * argv[])  {
     << std::endl;
     exit(EXIT_FAILURE);
   }
-
 }
+
 //=============================================================================
 // Commands
 void delay_cmd(std::string delaytime)  {
@@ -101,7 +102,7 @@ double gtime_cmd()  {
 	return seconds_passed;
 }
 
-int put_cmd_client(std::fstream &fp)  {
+int put_cmd_client(std::fstream &fp, std::string & objname)  {
   /* Since the object in put now has content, we need a function that can deal
   with it*/
   char            WSPACE[] = "\t ";
@@ -132,8 +133,11 @@ int put_cmd_client(std::fstream &fp)  {
       // The plan is to use strtok to get only the line.
       strcpy(conbuff, oneline.c_str());
       buffer = strtok(conbuff, WSPACE);
-      
-
+      if (buffer == objname + ':')  {
+        // Checking if the name of the file is the same
+        std::cout << "same" << std::endl;
+      }
+      std::cout << objname << std::endl;
       std::cout << buffer << std::endl;
       buffer = strtok(NULL, "\n");
       std::cout << buffer << std::endl;
@@ -148,51 +152,51 @@ int put_cmd_client(std::fstream &fp)  {
 int put_cmd_server(char * cid, char * item)  {
 	/* This function adds an object to the list. Updated to match with the new
   requisites */
-	std::string				item_s = item;
-	int								cidi = atoi(cid);
-	if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
-		// Already exists, return an error
-		return -1;
-	}  else  {
-		obj_list[cidi].insert(item_s);
-		return 0;
-	}
+	// std::string				item_s = item;
+	// int								cidi = atoi(cid);
+	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
+	// 	// Already exists, return an error
+	// 	return -1;
+	// }  else  {
+	// 	obj_list[cidi].insert(item_s);
+	// 	return 0;
+  // }
 }
 
 int get_cmd(char * cid, char * item)  {
 	/* This function retrieves the object from the list*/
-	std::string				item_s = item;
-	for (auto i : obj_list)  {
-		/* Need to look at all the objects what was put here by all clients*/
-		if (i.second.find(item_s) != i.second.end())  {
-			/* If the object exists, then do normal return*/
-			return 0;
-		}
-	}
+	// std::string				item_s = item;
+	// for (auto i : obj_list)  {
+	// 	/* Need to look at all the objects what was put here by all clients*/
+	// 	if (i.second.find(item_s) != i.second.end())  {
+	// 		/* If the object exists, then do normal return*/
+	// 		return 0;
+	// 	}
+	// }
 	/* The object does not exist in the thing, return error*/
 	return -1;
 }
 
 int delete_cmd(char * cid, char * item)  {
 	/* This function will delete the object that is stored*/
-	std::string				item_s = item;
-	int								cidi = atoi(cid);
-	if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
-		/* If the object belongs to client, proceed as intended*/
-		obj_list[cidi].erase(item_s);
-		return 0;
-	}
-	for (auto i : obj_list)  {
-		/* Need to look at all the objects what was put here by all clients*/
-		if (i.first == cidi)  {
-			continue;
-		}  else if (i.second.find(item_s) != i.second.end())  {
-			/* If the object exists, but not owned by client*/
-			return -2;
-		}
-	}
-	/* The object does not exist in the thing*/
-	return -1;
+	// std::string				item_s = item;
+	// int								cidi = atoi(cid);
+	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
+	// 	/* If the object belongs to client, proceed as intended*/
+	// 	obj_list[cidi].erase(item_s);
+	// 	return 0;
+	// }
+	// for (auto i : obj_list)  {
+	// 	/* Need to look at all the objects what was put here by all clients*/
+	// 	if (i.first == cidi)  {
+	// 		continue;
+	// 	}  else if (i.second.find(item_s) != i.second.end())  {
+	// 		/* If the object exists, but not owned by client*/
+	// 		return -2;
+	// 	}
+	// }
+	// /* The object does not exist in the thing*/
+	// return -1;
 }
 
 //=============================================================================
@@ -435,7 +439,7 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   }  else if (tokens[1] == "put")  {
     /* Handling the put command. Since we also need the name of the object, we
     will just send this into another function*/
-    put_cmd_client(fp);
+    put_cmd_client(fp, tokens[2]);
 
   }
 }
@@ -461,8 +465,6 @@ void server_receiver(int cid, int fd, char * inpacket)  {
 
   return;
 }
-
-
 
 
 //=============================================================================
