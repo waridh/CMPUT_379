@@ -102,12 +102,14 @@ double gtime_cmd()  {
 	return seconds_passed;
 }
 
-int put_cmd_client(std::fstream &fp, std::string & objname)  {
+int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid)  {
   /* Since the object in put now has content, we need a function that can deal
   with it*/
   char            WSPACE[] = "\t ";
   char            * buffer;
   char            conbuff[PUTSZ + MAXWORD];
+  char            sendingcont[CONTLINE][PUTSZ];
+  int             i;
   int             linecount;
   std::string     oneline;
 
@@ -135,23 +137,35 @@ int put_cmd_client(std::fstream &fp, std::string & objname)  {
       buffer = strtok(conbuff, WSPACE);
       if (buffer == objname + ':')  {
         // Checking if the name of the file is the same
-        std::cout << "same" << std::endl;
+        buffer = strtok(NULL, "\n");
+        strcpy(sendingcont[linecount], buffer);
+        linecount++;
+
+        if (linecount > CONTLINE)  {
+          // Error handling for when there are too many contents
+          std::cout << "There are too many contents in object " << objname
+          << std::endl;
+          exit(EXIT_FAILURE);
+        }
       }
-      std::cout << objname << std::endl;
-      std::cout << buffer << std::endl;
-      buffer = strtok(NULL, "\n");
-      std::cout << buffer << std::endl;
-      std::cout << oneline << std::endl;
     }
-    // We now need to collect the thing
-    // TODO: Make the formatting more correct soon
-    linecount++;
+  }
+  // Now we want to write the packet and message to the thing
+  strcpy(buffer, objname.c_str());
+  send_2_items(fd, "PUT", buffer, cid);
+  for (i = 0; i < linecount; i++)  {
+    // Thingy
+    std::cout << sendingcont[i] << std::endl;
   }
 }
 
-int put_cmd_server(char * cid, char * item)  {
+int put_cmd_server(int cid, int fd)  {
 	/* This function adds an object to the list. Updated to match with the new
   requisites */
+  char              buffer[MAXWORD];
+
+  read(fd, buffer, sizeof(buffer));
+  std::cout << buffer << std::endl;
 	// std::string				item_s = item;
 	// int								cidi = atoi(cid);
 	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
@@ -439,7 +453,8 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   }  else if (tokens[1] == "put")  {
     /* Handling the put command. Since we also need the name of the object, we
     will just send this into another function*/
-    put_cmd_client(fp, tokens[2]);
+    strcpy(buffer, tokens[0].c_str());
+    put_cmd_client(fp, tokens[2], fd, buffer);
 
   }
 }
@@ -461,6 +476,8 @@ void server_receiver(int cid, int fd, char * inpacket)  {
     strcpy(packet, "TIME");
     sprintf(msgout, "%0.2f", gtimer);
     send_2_items(fd, packet, msgout, src);
+  }  else if (strncmp(inpacket, "PUT", 3) == 0)  {
+    put_cmd_server(cid, fd);
   }
 
   return;
