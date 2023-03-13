@@ -28,9 +28,24 @@
 #define   MSGSZ         64
 #define   NCLIENT       3
 #define   NOBJECT       16
-#define   PUTSZ         81
+#define   PUTSZ         80
 #define   SA            struct sockaddr
 #define   TOKSZ         3
+
+//=============================================================================
+// Designing a struct
+typedef struct  { double          msg[CONTLINE];}             MSG_DOUBLE;
+typedef struct  { char            msg[CONTLINE][PUTSZ];}      MSG_CHAR;
+typedef struct  { int             msg[CONTLINE];}             MSG_INT;
+// Trying to use structs instead of sending bunch of strings.
+typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c; MSG_INT m_i;} MSG;
+
+typedef struct  { char kind[MAXWORD]; int lines; MSG msg;} FRAME;
+
+#define   MAXBUF        sizeof(FRAME);
+
+
+
 
 //=============================================================================
 // Global variables
@@ -63,6 +78,7 @@ void user_inpt_err(int argc, char * argv[])  {
 // Utilities 1
 void send_2_items(int fd, char * msg1, char * msg2, char * src)  {
   // When we are sending two things to the file descriptor
+
   write(fd, msg1, sizeof(msg1));
   usleep(50);  // I needed to add this so that the process doesn't break socket
   write(fd, msg2, sizeof(msg2));
@@ -122,14 +138,20 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   with it*/
   char            WSPACE[] = "\t ";
   char            * buffer;
-  char            buffer2[MAXWORD];
+  char            buffer2[MAXWORD + 1];
+  char            buffer3[MAXWORD + 1];
   char            conbuff[PUTSZ + MAXWORD];
   char            sendingcont[CONTLINE][PUTSZ];
+  FILE            * fp2 = fdopen(fd, "w");
+  FRAME           send_packet;
   int             i;
   int             linecount;
   std::string     oneline;
 
   std::cout << std::endl;
+  memset( (char *) &send_packet, 0, sizeof(send_packet));
+  // Establishing the frame
+  sprintf(send_packet.kind, "PUT");
   while (std::getline(fp, oneline))  {
     // Grabbing the contents of the thing
     if (oneline == "}")  {
@@ -143,7 +165,7 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
       // Ignoring the unimportant lines
       continue;
     }  else if (
-      (oneline[0] == '{')
+      (oneline == "{")
     )  {
       linecount = 0;
       continue;
@@ -167,26 +189,39 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
     }
   }
   // Now we want to write the packet and message to the thing
-  strcpy(buffer2, objname.c_str());
-
-  write(fd, "PUT", sizeof("PUT"));
+  // strcpy(buffer2, objname.c_str());
+  sprintf(buffer2, "%s\n", objname.c_str());
   std::cout << "This is buffer2: "<< buffer2 << std::endl;
-  write(fd, buffer2, sizeof(buffer2));
+  std::cout << sizeof(buffer2) << std::endl;
+  if (write(fd, buffer2, sizeof(buffer2)) < 0)  {
+    // What the hey
+    std::cout << "Failed to send the message" << std::endl;
+  }
+  std::cout << "We got past sending" << std::endl;
+  std::cout << "Sent: " << buffer2 << std::endl;
+  sprintf(buffer3, "%d", linecount);
+  
+
 
   // send_2_items(fd, "PUT", buffer, cid);
-  for (i = 0; i < linecount; i++)  {
-    // Thingy
-    std::cout << sendingcont[i] << std::endl;
-  }
+  // for (i = 0; i < linecount; i++)  {
+  //   // Thingy
+  //   std::cout << sendingcont[i] << std::endl;
+  // }
+  return 0;
 }
 
 int put_cmd_server(int cid, int fd)  {
 	/* This function adds an object to the list. Updated to match with the new
   requisites */
-  char              buffer[MAXWORD];
+  char              buffer[MAXWORD + 1];
+  FILE              * fp = fdopen(fd, "r");
 
+  // read(fd, buffer, sizeof(buffer));
   read(fd, buffer, sizeof(buffer));
   std::cout << "This is buffer2: " << buffer << std::endl;
+
+  fclose(fp);
 	// std::string				item_s = item;
 	// int								cidi = atoi(cid);
 	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
@@ -489,6 +524,7 @@ void server_receiver(int cid, int fd, char * inpacket)  {
     send_2_items(fd, packet, msgout, src);
   }  else if (strncmp(inpacket, "PUT", 3) == 0)  {
     std::cout << "GOT INTO PUT" << std::endl;
+    std::cout << inpacket << std::endl;
     put_cmd_server(cid, fd);
   }
 
@@ -505,7 +541,8 @@ void client_sendcmds(int fd, int cid, char * filename)  {
   char            buff0[MAXWORD];
   char            buffer[MAXWORD];
   char            filecont[CONTLINE][PUTSZ];
-  std::fstream   fp(filename);
+  FILE            * fpw = fdopen(fd, "w");
+  std::fstream    fp(filename);
   std::string     cmdline;
   std::string     tokens[TOKSZ];
   std::cout << filename << std::endl;
