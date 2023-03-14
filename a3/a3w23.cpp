@@ -34,12 +34,16 @@
 
 //=============================================================================
 // Designing a struct
+
+/* This substruct contains the doubles*/
 typedef struct  { double          msg[CONTLINE];}             MSG_DOUBLE;
+/* This substruct contains the character lines*/
 typedef struct  { char            msg[CONTLINE][PUTSZ];}      MSG_CHAR;
+/* This substruct contains the name of the file for puts and stuff*/
 typedef struct  { char             msg[MAXWORD];}             MSG_OBJ;
 // Trying to use structs instead of sending bunch of strings.
-typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c; MSG_OBJ m_i;} MSG;
-
+typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c; MSG_OBJ m_o;} MSG;
+/* The full frame struct that contains the entire header and msg*/
 typedef struct  { char kind[MAXWORD]; int lines; MSG msg;} FRAME;
 
 #define   MAXBUF        sizeof(FRAME);
@@ -213,17 +217,13 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   return 0;
 }
 
-int put_cmd_server(int cid, int fd)  {
+int put_cmd_server(int cid, int fd, FRAME * frame)  {
 	/* This function adds an object to the list. Updated to match with the new
   requisites */
   char              buffer[MAXWORD + 1];
-  FRAME             frame;
-
-  memset( (char *) &frame, 0, sizeof(frame));
 
   // read(fd, buffer, sizeof(buffer));
-  read(fd, (char *) &frame, sizeof(frame));
-  std::cout << "This is buffer2: " << frame.msg.m_c.msg[0] << std::endl;
+  std::cout << "This is buffer2: " << frame->msg.m_o.msg[0] << std::endl;
 
 	// std::string				item_s = item;
 	// int								cidi = atoi(cid);
@@ -280,31 +280,32 @@ int delete_cmd(char * cid, char * item)  {
 void client_reciever(int fd, char * src)  {
   // Collects the response from the server
   char            buffer[MAXWORD];
-  char            buffer2[MAXWORD];
+  FRAME           inframe;
 
   // Getting the first packet
-  read(fd, buffer, sizeof(buffer));
-  read(fd, buffer2, sizeof(buffer2));
+  // read(fd, buffer, sizeof(buffer));
+  // read(fd, buffer2, sizeof(buffer2));
+  read(fd, (char *) &inframe, sizeof(inframe));
 
   std::cout << std::endl;
 
-  if (strncmp(buffer2, "UNLOVED", 7) == 0)  {
+  std::cout << inframe.kind << std::endl;
+  if (strncmp(inframe.msg.m_o.msg, "UNLOVED", 7) == 0)  {
     // This is the message for no message
     std::cout << "Received (src= " << src << ") " << buffer << std::endl;
     return;
   }
-  std::cout << "Received (src= " << src << ") " << "( " 
-  << buffer << ": " << buffer2 << " )" << std::endl;
+  
   // If the server wants the client to quit
-  if (strncmp(buffer, "QUIT", 4) == 0)  {
+  if (strncmp(inframe.kind, "QUIT", 4) == 0)  {
     // The QUIT packet was sent back
-    if (strncmp(buffer2, "ALCONN", 6) == 0)  {
+    if (strncmp(inframe.msg.m_o.msg, "ALCONN", 6) == 0)  {
       // The same client ID was already connected
       std::cout << "A client with this ID has already been connected"
       << std::endl;
       std::cout << "Please try again later" << std::endl;
       quit_cmd(fd);
-    }  else if (strncmp(buffer2, "TOOLRG", 6) == 0)  {
+    }  else if (strncmp(inframe.msg.m_o.msg, "TOOLRG", 6) == 0)  {
       // This client ID is above the limit size
       std::cout << "This client ID is above the maximum allowed" << std::endl;
       std::cout << "Please try again later" << std::endl;
@@ -313,7 +314,12 @@ void client_reciever(int fd, char * src)  {
       // I guess the server just wants the client to quit? Implementing it.
       quit_cmd(fd);
     }
+  }  else if (strncmp(inframe.kind, "TIME", 4) == 0)  {
+    // Recieved the time command
+    sprintf(buffer, "%0.2f", inframe.msg.m_d.msg[0]);
   }
+  std::cout << "Received (src= " << src << ") " << "( " 
+  << inframe.kind << ": " << buffer << " )" << std::endl;
 
   return;
 }
@@ -522,6 +528,7 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
   char        * src = "server";
   double      gtimer;
   int         len;
+  FRAME       frameout;
   MSG         msg;
 
   // Clearing the struct
@@ -529,15 +536,22 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
   if (strncmp(frame->kind, "GTIME", 5) == 0)  {
     // Checking for GTIME first as it is easier to implement
     // server_receiver_print(cid, inpacket, "UNLOVED");
+
+    // Clearing the struct being sent back
+    memset((char *) &frameout, 0, sizeof(frameout));
+    memset((char *) &msg, 0, sizeof(msg));
+
     std::cout << "Just got GTIME" << std::endl;
     gtimer = gtime_cmd();  // Getting the time since program began
     // Making output packet and msg
-    strcpy(packet, "TIME");
-    sprintf(msgout, "%0.2f", gtimer);
-    send_2_items(fd, packet, msgout, src);
+    strcpy(frameout.kind, "TIME");
+    // sprintf(msgout, "%0.2f", gtimer);
+    frameout.msg.m_d.msg[0] = gtimer;
+    // send_2_items(fd, packet, msgout, src);
+    write(fd, (char *) &frameout, sizeof(frameout));
+
   }  else if (strncmp(frame->kind, "PUT", 3) == 0)  {
-    std::cout << "GOT INTO PUT" << std::endl;
-    put_cmd_server(cid, fd);
+    put_cmd_server(cid, fd, frame);
   }
 
   return;
