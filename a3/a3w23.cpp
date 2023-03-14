@@ -36,9 +36,9 @@
 // Designing a struct
 typedef struct  { double          msg[CONTLINE];}             MSG_DOUBLE;
 typedef struct  { char            msg[CONTLINE][PUTSZ];}      MSG_CHAR;
-typedef struct  { int             msg[CONTLINE];}             MSG_INT;
+typedef struct  { char             msg[MAXWORD];}             MSG_OBJ;
 // Trying to use structs instead of sending bunch of strings.
-typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c; MSG_INT m_i;} MSG;
+typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c; MSG_OBJ m_i;} MSG;
 
 typedef struct  { char kind[MAXWORD]; int lines; MSG msg;} FRAME;
 
@@ -144,13 +144,16 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   char            sendingcont[CONTLINE][PUTSZ];
   FILE            * fp2 = fdopen(fd, "w");
   FRAME           send_packet;
+  MSG             msg;
   int             i;
   int             linecount;
   std::string     oneline;
 
   std::cout << std::endl;
   memset( (char *) &send_packet, 0, sizeof(send_packet));
+  memset( (char *) &msg, 0, sizeof(msg));
   // Establishing the frame
+  write(fd, "PUT", sizeof("PUT"));
   sprintf(send_packet.kind, "PUT");
   while (std::getline(fp, oneline))  {
     // Grabbing the contents of the thing
@@ -176,7 +179,7 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
       if (buffer == objname + ':')  {
         // Checking if the name of the file is the same
         buffer = strtok(NULL, "\n");
-        strcpy(sendingcont[linecount], buffer);
+        strcpy(msg.m_c.msg[linecount], buffer);
         linecount++;
 
         if (linecount > CONTLINE)  {
@@ -190,10 +193,9 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   }
   // Now we want to write the packet and message to the thing
   // strcpy(buffer2, objname.c_str());
-  sprintf(buffer2, "%s\n", objname.c_str());
-  std::cout << "This is buffer2: "<< buffer2 << std::endl;
-  std::cout << sizeof(buffer2) << std::endl;
-  if (write(fd, buffer2, sizeof(buffer2)) < 0)  {
+  // sprintf(buffer2, "%s\n", objname.c_str());
+  send_packet.msg = msg;
+  if (write(fd, (char *) &send_packet, sizeof(send_packet)) < 0)  {
     // What the hey
     std::cout << "Failed to send the message" << std::endl;
   }
@@ -215,13 +217,14 @@ int put_cmd_server(int cid, int fd)  {
 	/* This function adds an object to the list. Updated to match with the new
   requisites */
   char              buffer[MAXWORD + 1];
-  FILE              * fp = fdopen(fd, "r");
+  FRAME             frame;
+
+  memset( (char *) &frame, 0, sizeof(frame));
 
   // read(fd, buffer, sizeof(buffer));
-  read(fd, buffer, sizeof(buffer));
-  std::cout << "This is buffer2: " << buffer << std::endl;
+  read(fd, (char *) &frame, sizeof(frame));
+  std::cout << "This is buffer2: " << frame.msg.m_c.msg[0] << std::endl;
 
-  fclose(fp);
 	// std::string				item_s = item;
 	// int								cidi = atoi(cid);
 	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
@@ -478,7 +481,13 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   char        buffer[MAXWORD];
   char        buffer2[MAXWORD];
   char        * fromwho = "server";
+  FRAME       frame;
+  MSG         msg;
   std::string contents[CONTLINE];
+
+  // Clearing the memory of the thing
+  memset( (char *) &frame, 0, sizeof(frame));
+  memset( (char *) &msg, 0, sizeof(msg));
 
   if (tokens[1] == "delay")  {
     // First check if for delay
@@ -486,8 +495,8 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
     return;
   }  else if (tokens[1] == "gtime")  {
     // Asking for the time since server began 
-    strcpy(buffer, "GTIME");
-    write(fd, buffer, sizeof(buffer));
+    strcpy(frame.kind, "GTIME");
+    write(fd, (char *) &frame, sizeof(frame));
     // Using the gtime function, we send the packet
     client_reciever(fd, fromwho);
   }  else if (tokens[1] == "quit")  {
@@ -505,7 +514,7 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   }
 }
 
-void server_receiver(int cid, int fd, char * inpacket)  {
+void server_receiver(int cid, int fd, FRAME * frame)  {
   // This function will recieve the packets from the client
   char        buffer[MAXWORD];
   char        packet[MAXWORD];
@@ -513,18 +522,21 @@ void server_receiver(int cid, int fd, char * inpacket)  {
   char        * src = "server";
   double      gtimer;
   int         len;
+  MSG         msg;
 
-  if (strncmp(inpacket, "GTIME", 5) == 0)  {
+  // Clearing the struct
+
+  if (strncmp(frame->kind, "GTIME", 5) == 0)  {
     // Checking for GTIME first as it is easier to implement
-    server_receiver_print(cid, inpacket, "UNLOVED");
+    // server_receiver_print(cid, inpacket, "UNLOVED");
+    std::cout << "Just got GTIME" << std::endl;
     gtimer = gtime_cmd();  // Getting the time since program began
     // Making output packet and msg
     strcpy(packet, "TIME");
     sprintf(msgout, "%0.2f", gtimer);
     send_2_items(fd, packet, msgout, src);
-  }  else if (strncmp(inpacket, "PUT", 3) == 0)  {
+  }  else if (strncmp(frame->kind, "PUT", 3) == 0)  {
     std::cout << "GOT INTO PUT" << std::endl;
-    std::cout << inpacket << std::endl;
     put_cmd_server(cid, fd);
   }
 
@@ -541,11 +553,11 @@ void client_sendcmds(int fd, int cid, char * filename)  {
   char            buff0[MAXWORD];
   char            buffer[MAXWORD];
   char            filecont[CONTLINE][PUTSZ];
-  FILE            * fpw = fdopen(fd, "w");
   std::fstream    fp(filename);
   std::string     cmdline;
   std::string     tokens[TOKSZ];
   std::cout << filename << std::endl;
+
   while (std::getline(fp, cmdline))  {
 		// Loop for grabbing cmd lines from the client file
     if (
@@ -569,14 +581,13 @@ void client_sendcmds(int fd, int cid, char * filename)  {
 
 void client_main(int argc, char * argv[])  {
   /* This is the main function for client */
-  // TODO: Implement quit on the client
 
   // Initialization
   char            ip_name[30];
   char            buffer[MAXWORD];
   int             cid;
+  int             fd;
   int             port_number;
-  struct pollfd   pollfds[2];
 
   // Last input client check
   if (argc != 6)  {
@@ -591,28 +602,26 @@ void client_main(int argc, char * argv[])  {
     exit(EXIT_FAILURE);
   }
 
-  // Setting up the pollfd
-  server_poll_struct_set(pollfds);
   
   cid = atoi(argv[2]);
   port_number = atoi(argv[5]);
 
 	// Socket initialization
-  pollfds[1].fd = client_connect(argv[4], port_number);
+  fd = client_connect(argv[4], port_number);
 
   // Confirming connections with the server 
-  confirm_connection_client(pollfds[1].fd, cid);
+  confirm_connection_client(fd, cid);
 
   // Need to loop and read the commands from the file and send it to the socket
-  client_sendcmds(pollfds[1].fd, cid, argv[3]);
+  client_sendcmds(fd, cid, argv[3]);
 
 	
 	// Closing all the pipes from this end
-	close(pollfds[1].fd);
+	close(fd);
 
 	// Unlink the client specific pipes
 	sleep(1);
-	pthread_exit(NULL);
+	exit(EXIT_SUCCESS);
 }
 
 void server_main(int argc, char * argv[])  {
@@ -631,6 +640,7 @@ void server_main(int argc, char * argv[])  {
   int                 clientfds[NCLIENT];
   int                 port_number;
   int                 timeout = 100;
+  FRAME               frame;
   struct pollfd       pollfds[2 + NCLIENT];
   struct sockaddr_in  frominfo;
   socklen_t           frominfolen;
@@ -709,14 +719,15 @@ void server_main(int argc, char * argv[])  {
         // The connected socket loop check
         if ((connections[i] != 0) && (pollfds[2 + i].revents & POLLIN))  {
           // Checking if there is input in this certain socket
-          len = read(pollfds[2 + i].fd, buffer, sizeof(buffer));
+          memset((char *) &frame, 0, sizeof(frame));
+          len = read(pollfds[2 + i].fd, (char *) &frame, sizeof(frame));
           if (len == 0)  {
             // When we lose connection with the client
             std::cout << "lost connection to client " << connections[i]
             << std::endl;
             connections[i] = 0;
             continue;
-          }  else if (strncmp(buffer, "QUIT", 4) == 0)  {
+          }  else if (strncmp(frame.kind, "QUIT", 4) == 0)  {
             // If the client sends the quit packet to the server
             
             write(pollfds[2 + i].fd, buffer, sizeof(buffer));
@@ -732,7 +743,7 @@ void server_main(int argc, char * argv[])  {
             continue;
           }
           /* Receives and sends back the appropriate packet*/
-          server_receiver(connections[i], pollfds[2 + i].fd, buffer);
+          server_receiver(connections[i], pollfds[2 + i].fd, &frame);
         }
       }
     }
