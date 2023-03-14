@@ -39,12 +39,15 @@
 typedef struct  { double          msg[CONTLINE];}             MSG_DOUBLE;
 /* This substruct contains the character lines*/
 typedef struct  { char            msg[CONTLINE][PUTSZ];}      MSG_CHAR;
-/* This substruct contains the name of the file for puts and stuff*/
-typedef struct  { char             msg[MAXWORD];}             MSG_OBJ;
 // Trying to use structs instead of sending bunch of strings.
-typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c; MSG_OBJ m_o;} MSG;
+typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c;} MSG;
 /* The full frame struct that contains the entire header and msg*/
-typedef struct  { char kind[MAXWORD]; int lines; MSG msg;} FRAME;
+typedef struct  {
+  char kind[MAXWORD];
+  char obj[MAXWORD];
+  int lines;
+  MSG msg;
+  } FRAME;
 
 #define   MAXBUF        sizeof(FRAME);
 
@@ -157,11 +160,12 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   memset( (char *) &send_packet, 0, sizeof(send_packet));
   memset( (char *) &msg, 0, sizeof(msg));
   // Establishing the frame
-  write(fd, "PUT", sizeof("PUT"));
   sprintf(send_packet.kind, "PUT");
+  strcpy(send_packet.obj, objname.c_str());
   while (std::getline(fp, oneline))  {
     // Grabbing the contents of the thing
     if (oneline == "}")  {
+      send_packet.lines = linecount;
       break;
     }  else if (
       (oneline[0] == '#')
@@ -203,8 +207,7 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
     // What the hey
     std::cout << "Failed to send the message" << std::endl;
   }
-  std::cout << "We got past sending" << std::endl;
-  std::cout << "Sent: " << buffer2 << std::endl;
+  std::cout << "Sent: " << send_packet.obj << std::endl;
   sprintf(buffer3, "%d", linecount);
   
 
@@ -223,7 +226,7 @@ int put_cmd_server(int cid, int fd, FRAME * frame)  {
   char              buffer[MAXWORD + 1];
 
   // read(fd, buffer, sizeof(buffer));
-  std::cout << "This is buffer2: " << frame->msg.m_o.msg[0] << std::endl;
+  std::cout << "This is buffer2: " << frame->obj << std::endl;
 
 	// std::string				item_s = item;
 	// int								cidi = atoi(cid);
@@ -290,7 +293,7 @@ void client_reciever(int fd, char * src)  {
   std::cout << std::endl;
 
   std::cout << inframe.kind << std::endl;
-  if (strncmp(inframe.msg.m_o.msg, "UNLOVED", 7) == 0)  {
+  if (strncmp(inframe.obj, "UNLOVED", 7) == 0)  {
     // This is the message for no message
     std::cout << "Received (src= " << src << ") " << buffer << std::endl;
     return;
@@ -299,13 +302,13 @@ void client_reciever(int fd, char * src)  {
   // If the server wants the client to quit
   if (strncmp(inframe.kind, "QUIT", 4) == 0)  {
     // The QUIT packet was sent back
-    if (strncmp(inframe.msg.m_o.msg, "ALCONN", 6) == 0)  {
+    if (strncmp(inframe.obj, "ALCONN", 6) == 0)  {
       // The same client ID was already connected
       std::cout << "A client with this ID has already been connected"
       << std::endl;
       std::cout << "Please try again later" << std::endl;
       quit_cmd(fd);
-    }  else if (strncmp(inframe.msg.m_o.msg, "TOOLRG", 6) == 0)  {
+    }  else if (strncmp(inframe.obj, "TOOLRG", 6) == 0)  {
       // This client ID is above the limit size
       std::cout << "This client ID is above the maximum allowed" << std::endl;
       std::cout << "Please try again later" << std::endl;
@@ -371,7 +374,6 @@ int client_connect(const char * ip_name, int port_number)  {
   };
   
   // Convert the ip address to the desired value
-  // TODO: For numerical input
 
   // put the host’s address, and type into a socket structure
   memset((char *) &server_addr, 0, sizeof(server_addr));
