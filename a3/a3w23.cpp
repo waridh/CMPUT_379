@@ -318,7 +318,7 @@ int put_cmd_server(int fd, FRAME * frame)  {
 
 }
 
-int get_cmd_client(char * cid, char * item)  {
+int get_cmd_client(int fd, FRAME * frame, std::string & objname)  {
 	/* This function retrieves the object from the list*/
 	// std::string				item_s = item;
 	// for (auto i : obj_list)  {
@@ -329,13 +329,65 @@ int get_cmd_client(char * cid, char * item)  {
 	// 	}
 	// }
 	/* The object does not exist in the thing, return error*/
-	return -1;
+	strcpy(frame->kind, "GET");
+  strcpy(frame->obj, objname.c_str());
+  if (write(fd, (char *) frame, sizeof(* frame)) <= 0)  {
+    std::cout << "*** Message failed to send" << std::endl;
+    std::cout << "Quitting" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+
+  return 0;
 }
 
 int get_cmd_server(int fd, FRAME * frame)  {
   /*
   This function handles the get cmd on the server side
   */
+  int           i;
+  int           j;
+  int           lines;
+  FRAME         outframe;
+  MSG           msg;
+  std::string   key(frame->obj);
+
+  // Initializing the packet
+  memset((char *) &outframe, 0, sizeof(outframe));
+  memset((char *) &msg, 0, sizeof(msg));
+  outframe.id = 0;
+
+  // Printing the receiver
+  std::cout << std::endl;
+  receiver_print(frame);
+
+  // Pre-allocate the response for when the object just doesn't exist in the
+  // server
+  strcpy(outframe.kind, "ERROR"); sprintf(outframe.obj, "object not found");
+
+  // Doing a check for if the file exists
+  for  (i = 0; i < NCLIENT; i++)  {
+    if  (obj_list[i].find(key) != obj_list[i].end())  {
+      /* Found the object we are looking for, send back ok packet with the
+      content in the msg*/
+      
+      strcpy(outframe.kind, "OK");
+      sprintf(outframe.obj, "@@@GIFT");
+
+      outframe.lines = atoi(obj_list[i][key][NCLIENT]);
+      for  (j = 0; j < outframe.lines; j++)  {
+        // Copying the content into the packet
+        strcpy(msg.m_c.msg[j], obj_list[i][key][j]);
+      }
+      outframe.msg = msg;
+      break;
+    }
+  }
+
+  write(fd, (char *) &outframe, sizeof(outframe));
+  transmitter_print(&outframe);
+  return 0;
+
 }
 
 int delete_cmd_server(int fd, FRAME * frame)  {
@@ -690,6 +742,9 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
   }  else if (strncmp(frame->kind, "DELETE", 6) == 0)  {
     // For the delete command we run the handler for it
     delete_cmd_server(fd, frame);
+  }  else if (strncmp(frame->kind, "GET") == 0)  {
+    // For the get command
+    get_cmd_server(fd, frame);
   }
 
   return;
