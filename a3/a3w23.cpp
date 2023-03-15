@@ -61,7 +61,7 @@ typedef struct  {
 clock_t                                 start = times(NULL); // For gtime
 int                                     list_count = 0; // Counting list
 static long                             clktck = 0; // Clk work
-std::map<char *, char[4][PUTSZ]>    obj_list[NCLIENT];
+std::map<std::string, char[4][PUTSZ]>        obj_list[NCLIENT];
 // We are holding the objs
 
 // Error checker for user input
@@ -89,6 +89,7 @@ void receiver_print(FRAME * frame)  {
   char          buffer[MAXWORD];
   int           i;
   int           lines;
+  std::string   key;
 
   if (strncmp(frame->obj, "UNLOVED", 7) == 0)  {
     // For when the packet does not have a msg
@@ -107,11 +108,12 @@ void receiver_print(FRAME * frame)  {
 
   if (strncmp(frame->kind, "PUT", 3) == 0)  {
     // Need to print out the content of the put packet
-    lines = atoi(obj_list[frame->id - 1][frame->obj][3]);
+    key = frame->obj;
+    lines = atoi(obj_list[frame->id - 1][key][3]);
     for (i = 0; i < lines; i++)  {
       // Outputting the content that was received
       std::cout << " [" << i << "]: '"
-      << obj_list[frame->id - 1][frame->obj][i] << "'" << std::endl;
+      << obj_list[frame->id - 1][key][i] << "'" << std::endl;
     }
   }
   return;
@@ -275,13 +277,28 @@ int put_cmd_server(int fd, FRAME * frame)  {
   requisites */
   char              buffer[MAXWORD + 1];
   int               i;
+  std::string       key(frame->obj);
   /*
   TODO: Find out why the hell we are saying that it exists
   */
   // Unpacking the packet
+  for  (auto j:obj_list[frame->id - 1])  {
+    // Check by manually iterating through the the stored data because c weird
+    if  (j.first == key)  {
+      // The check if it already exists in our server storage
+      std::cout << "Found a duplicate" << std::endl;
+      std::cout << "Stored: " << j.first << std::endl;
+      std::cout << "Received: " << frame->obj << std::endl;
+      std::cout << "The amount of lines: " << j.second[3] << std::endl;
+    }  else  {
+      std::cout << "Did not find a duplicate" << std::endl;
+    }
+  }
   if  (
-    obj_list[frame->id - 1].find(frame->obj) != obj_list[frame->id -1].end()
+    obj_list[frame->id - 1].find(key)
+    != obj_list[frame->id - 1].end()
     )  {
+      std::cout << frame->obj << std::endl;
       std::cout << obj_list[frame->id - 1][frame->obj] << std::endl;
     // Checking if the key exists in the map
     std::cout << std::endl;
@@ -314,6 +331,7 @@ int put_cmd_server(int fd, FRAME * frame)  {
   strcpy(frame->obj, "UNLOVED");
   write(fd, (char *) frame, sizeof(*frame));
   return 0;
+
 }
 
 int get_cmd(char * cid, char * item)  {
