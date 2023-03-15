@@ -109,11 +109,11 @@ void receiver_print(FRAME * frame)  {
   if (strncmp(frame->kind, "PUT", 3) == 0)  {
     // Need to print out the content of the put packet
     key = frame->obj;
-    lines = atoi(obj_list[frame->id - 1][key][3]);
-    for (i = 0; i < lines; i++)  {
+    
+    for (i = 0; i < frame->lines; i++)  {
       // Outputting the content that was received
       std::cout << " [" << i << "]: '"
-      << obj_list[frame->id - 1][key][i] << "'" << std::endl;
+      << frame->msg.m_c.msg[i] << "'" << std::endl;
     }
   }
   return;
@@ -253,7 +253,6 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, FRAME * fram
     }
   }
   // Now we want to write the packet and message to the thing
-  std::cout << "Got pretty far" << std::endl;
   frame->msg = msg;
   if (write(fd, (char *) frame, sizeof(*frame)) < 0)  {
     // What the hey
@@ -282,18 +281,7 @@ int put_cmd_server(int fd, FRAME * frame)  {
   TODO: Find out why the hell we are saying that it exists
   */
   // Unpacking the packet
-  for  (auto j:obj_list[frame->id - 1])  {
-    // Check by manually iterating through the the stored data because c weird
-    if  (j.first == key)  {
-      // The check if it already exists in our server storage
-      std::cout << "Found a duplicate" << std::endl;
-      std::cout << "Stored: " << j.first << std::endl;
-      std::cout << "Received: " << frame->obj << std::endl;
-      std::cout << "The amount of lines: " << j.second[3] << std::endl;
-    }  else  {
-      std::cout << "Did not find a duplicate" << std::endl;
-    }
-  }
+  
   if  (
     obj_list[frame->id - 1].find(key)
     != obj_list[frame->id - 1].end()
