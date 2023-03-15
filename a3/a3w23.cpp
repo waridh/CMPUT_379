@@ -282,12 +282,7 @@ int put_cmd_server(int fd, FRAME * frame)  {
   */
   // Unpacking the packet
   
-  if  (
-    obj_list[frame->id - 1].find(key)
-    != obj_list[frame->id - 1].end()
-    )  {
-      std::cout << frame->obj << std::endl;
-      std::cout << obj_list[frame->id - 1][frame->obj] << std::endl;
+  if  (obj_list[frame->id - 1].find(key) != obj_list[frame->id - 1].end())  {
     // Checking if the key exists in the map
     std::cout << std::endl;
     receiver_print(frame);
@@ -318,11 +313,12 @@ int put_cmd_server(int fd, FRAME * frame)  {
   strcpy(frame->kind, "OK");
   strcpy(frame->obj, "UNLOVED");
   write(fd, (char *) frame, sizeof(*frame));
+  transmitter_print(frame);
   return 0;
 
 }
 
-int get_cmd(char * cid, char * item)  {
+int get_cmd_client(char * cid, char * item)  {
 	/* This function retrieves the object from the list*/
 	// std::string				item_s = item;
 	// for (auto i : obj_list)  {
@@ -336,26 +332,92 @@ int get_cmd(char * cid, char * item)  {
 	return -1;
 }
 
-int delete_cmd(char * cid, char * item)  {
-	/* This function will delete the object that is stored*/
-	// std::string				item_s = item;
-	// int								cidi = atoi(cid);
-	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
-	// 	/* If the object belongs to client, proceed as intended*/
-	// 	obj_list[cidi].erase(item_s);
-	// 	return 0;
-	// }
-	// for (auto i : obj_list)  {
-	// 	/* Need to look at all the objects what was put here by all clients*/
-	// 	if (i.first == cidi)  {
-	// 		continue;
-	// 	}  else if (i.second.find(item_s) != i.second.end())  {
-	// 		/* If the object exists, but not owned by client*/
-	// 		return -2;
-	// 	}
-	// }
-	// /* The object does not exist in the thing*/
-	// return -1;
+int get_cmd_server(int fd, FRAME * frame)  {
+  /*
+  This function handles the get cmd on the server side
+  */
+}
+
+int delete_cmd_server(int fd, FRAME * frame)  {
+  /*
+  The delete packet should get rid of the content stored in the dictionary
+  and if it doesn't exist, then we should return an error packet
+  */
+  int           i;
+  FRAME         outframe;
+  std::string   key(frame->obj);
+
+  // Initializing the packet
+  memset((char *) &outframe, 0, sizeof(outframe));
+  outframe.id = 0;
+
+  // Printing the receiver
+  std::cout << std::endl;
+  receiver_print(frame);
+
+  // Pre-allocate the response for when the object just doesn't exist in the
+  // server
+  strcpy(outframe.kind, "ERROR"); sprintf(outframe.obj, "object not found");
+
+  // Doing a check for if the file exists
+  for (i = 0; i < NCLIENT; i++)  {
+    if  (obj_list[i].find(key) != obj_list[i].end())  {
+    // Check if the object exists in the server or not
+      if (i == frame->id - 1)  {
+        // In this case, the object exists and it is owned by the client
+        obj_list[i].erase(key);
+        strcpy(outframe.kind, "OK"); strcpy(outframe.obj, "UNLOVED");
+        break;
+      }  else  {
+        // Means that we found the object that doesn't belong to the client
+        strcpy(outframe.kind, "ERROR");
+        sprintf(outframe.obj, "client not owner");
+      }
+    }
+  }
+
+  write(fd, (char *) &outframe, sizeof(outframe));
+  transmitter_print(&outframe);
+  return 0;
+}
+
+int delete_cmd_client(int fd, FRAME * frame, std::string & objname)  {
+  /*
+  This is the client side of the delete command. Simply should just send a
+  packet, and then wait to receive the response from the server.
+  */
+  char            * buffer;
+  char            buffer2[MAXWORD + 1];
+  char            buffer3[MAXWORD + 1];
+  char            conbuff[PUTSZ + MAXWORD];
+  char            sendingcont[CONTLINE][PUTSZ];
+  FRAME           inframe;
+  int             i;
+  int             linecount;
+  std::string     oneline;
+
+  std::cout << std::endl;
+
+  // Establishing the frame
+  sprintf(frame->kind, "DELETE");
+  strcpy(frame->obj, objname.c_str());
+
+  if (write(fd, (char *) frame, sizeof(*frame)) < 0)  {
+    // What the hey
+    std::cout << "Failed to send the message" << std::endl;
+  }
+  transmitter_print(frame);
+
+  // Setting the inframe
+  memset((char *) &inframe, 0, sizeof(inframe));
+  // Need to wait for server confirmation
+  if (read(fd, (char *) &inframe, sizeof(inframe)) < 1)  {
+    // Error check
+    std::cout << "Failed to receive the message from server" << std::endl;
+  }
+  receiver_print(&inframe);
+  
+  return 0;
 }
 
 //=============================================================================
@@ -585,6 +647,9 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp, int src
   
     put_cmd_client(fp, tokens[2], fd, &frame);
 
+  }  else if (tokens[1] == "delete")  {
+    /* Handler for delete.*/
+    delete_cmd_client(fd, &frame, tokens[2]);
   }
 }
 
@@ -620,7 +685,11 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
     transmitter_print(&frameout);
 
   }  else if (strncmp(frame->kind, "PUT", 3) == 0)  {
+    // This is the handler for the PUT packet
     put_cmd_server(fd, frame);
+  }  else if (strncmp(frame->kind, "DELETE", 6) == 0)  {
+    // For the delete command we run the handler for it
+    delete_cmd_server(fd, frame);
   }
 
   return;
