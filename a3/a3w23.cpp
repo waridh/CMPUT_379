@@ -91,9 +91,12 @@ void receiver_print(FRAME * frame)  {
   int           lines;
   std::string   key;
 
-  if (strncmp(frame->obj, "UNLOVED", 7) == 0)  {
+  if (
+    (strncmp(frame->obj, "UNLOVED", 7) == 0)
+    || (strncmp(frame->kind, "OK", 2) == 0))  {
     // For when the packet does not have a msg
     std::cout << "Received (src= " << frame->id << ") " << frame->kind << std::endl;
+
     return;
   }  else if (strncmp(frame->kind, "TIME", 4) == 0)  {
     // For outputting for TIME packet
@@ -193,7 +196,11 @@ double gtime_cmd()  {
 	return seconds_passed;
 }
 
-int put_cmd_client(std::fstream &fp, std::string & objname, int fd, FRAME * frame)  {
+int put_cmd_client(
+  std::fstream &fp,
+  std::string & objname,
+  int fd,
+  FRAME * frame)  {
   /* Since the object in put now has content, we need a function that can deal
   with it*/
   char            WSPACE[] = "\t ";
@@ -277,9 +284,6 @@ int put_cmd_server(int fd, FRAME * frame)  {
   char              buffer[MAXWORD + 1];
   int               i;
   std::string       key(frame->obj);
-  /*
-  TODO: Find out why the hell we are saying that it exists
-  */
   // Unpacking the packet
   
   if  (obj_list[frame->id - 1].find(key) != obj_list[frame->id - 1].end())  {
@@ -319,22 +323,39 @@ int put_cmd_server(int fd, FRAME * frame)  {
 }
 
 int get_cmd_client(int fd, FRAME * frame, std::string & objname)  {
-	/* This function retrieves the object from the list*/
-	// std::string				item_s = item;
-	// for (auto i : obj_list)  {
-	// 	/* Need to look at all the objects what was put here by all clients*/
-	// 	if (i.second.find(item_s) != i.second.end())  {
-	// 		/* If the object exists, then do normal return*/
-	// 		return 0;
-	// 	}
-	// }
-	/* The object does not exist in the thing, return error*/
+	/*
+  The get command from the client. Sends the requesting packet, and then
+  wait for the response
+  */
+  int             i;
 	strcpy(frame->kind, "GET");
   strcpy(frame->obj, objname.c_str());
   if (write(fd, (char *) frame, sizeof(* frame)) <= 0)  {
+    // Error handling
     std::cout << "*** Message failed to send" << std::endl;
     std::cout << "Quitting" << std::endl;
     exit(EXIT_FAILURE);
+  }
+  std::cout << std::endl;
+  transmitter_print(frame);
+
+  // I am too lazy to allocate memory to have another frame, so we are reusing
+  // the frame
+
+  memset((char *) frame, 0, sizeof(*frame));
+  if (read(fd, (char *) frame, sizeof(* frame)) <= 0)  {
+    // Error handling for reading a weird length msg
+    std::cout << "*** Failed to receive the message from the server"
+    << std::endl;
+    std::cout << "Quitting" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  // Output what we received
+  receiver_print(frame);
+  for (i = 0; i < frame->lines; i++)  {
+    // Printing out the content
+    std::cout << " [" << i << "]: '" << frame->msg.m_c.msg[i]
+    << "'" << std::endl;
   }
 
 
@@ -364,6 +385,7 @@ int get_cmd_server(int fd, FRAME * frame)  {
   // Pre-allocate the response for when the object just doesn't exist in the
   // server
   strcpy(outframe.kind, "ERROR"); sprintf(outframe.obj, "object not found");
+  outframe.lines = 1; strcpy(outframe.msg.m_c.msg[0], "object not found");
 
   // Doing a check for if the file exists
   for  (i = 0; i < NCLIENT; i++)  {
@@ -532,8 +554,7 @@ void tokenizer(char * cmdline, std::string * tokens)  {
 int client_connect(const char * ip_name, int port_number)  {
   // Connects the client to the server, and returns the file descriptor
   // Got a lot of these code from the eclass example
-  // TODO: Implement IP lookup
-  // TODO: Implement number input
+
   int                   ip_addr;
   int                   sfd;
   struct hostent        *hostinfo;
@@ -613,23 +634,22 @@ int confirm_connection_client(int fd, int cid)  {
   // This function sends HELLO and the cid Returns of error
   char            buffer[MAXWORD];
   int             len;
+  FRAME           starterframe;
 
-  // Writing the HELLO packet
-  strcpy(buffer, "HELLO");
-  len = write(fd, buffer, sizeof(buffer));
-  if (len == 0)  {
+  memset((char *) &starterframe, 0, sizeof(starterframe));
+  // Setting up HELLO packet
+  starterframe.id = cid;
+  strcpy(starterframe.kind, "HELLO");
+  len = write(fd, (char *) &starterframe, sizeof(starterframe));
+  if (len <= 0)  {
     std::cout << "Couldn't write HELLO packet. Quitting" << std::endl;
     exit(EXIT_FAILURE);
   }
-  // Writing cid
-  sprintf(buffer, "%d", cid);
-  len = write(fd, buffer, sizeof(buffer));
   // Waiting for confirmation from server
-  len = read(fd, buffer, sizeof(buffer));
-  if (strncmp(buffer, "OK", 2) == 0)  {
-    // Recieved the OK packet back from the server
-    std::cout << "Recieved OK packet from server" << std::endl;
-  }
+  memset((char *) &starterframe, 0, sizeof(starterframe));
+  len = read(fd, &starterframe, sizeof(starterframe));
+  
+  receiver_print(&starterframe);
   return 0;
 }
 
@@ -638,16 +658,28 @@ int confirm_connection_server(int fd)  {
   char            buffer[MAXWORD];
   int             cid;
   int             len;
+  FRAME           instarter;
+
+  // Setting the incoming frame up
+  memset((char *) &instarter, 0, sizeof(instarter));
+
+
   // Reading buffer and then checking if it is appropriate
-  len = read(fd, buffer, sizeof(buffer));
-  if (strncmp(buffer, "HELLO", 5) == 0)  {
+  len = read(fd, (char *) &instarter, sizeof(instarter));
+  if (strncmp(instarter.kind, "HELLO", 5) == 0)  {
     // Checking packet
-    len = read(fd, buffer, sizeof(buffer));
-    cid = atoi(buffer);
-    std::cout << "Recieved the HELLO packet from client " << cid << "."
-    << std::endl;
-    sprintf(buffer, "OK");
-    write(fd, buffer, sizeof(buffer));
+    cid = instarter.id;
+    std::cout << std::endl;
+    std::cout << "Recieved (src= " << cid << ") (HELLO, idNumber= "
+    << instarter.id << ")" << std::endl;
+    
+    // Prepping to send back the OK packet
+    memset((char *) &instarter, 0, sizeof(instarter));
+    instarter.id = 0;
+    strcpy(instarter.kind, "OK");
+    strcpy(instarter.obj, "UNLOVED");
+    write(fd, (char *) & instarter, sizeof(instarter));
+    transmitter_print(&instarter);
     return cid;
   }  else  {
     // Did not get the HELLO packet
@@ -702,6 +734,9 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp, int src
   }  else if (tokens[1] == "delete")  {
     /* Handler for delete.*/
     delete_cmd_client(fd, &frame, tokens[2]);
+  }  else if (tokens[1] == "get")  {
+    /* Sending the get packet*/
+    get_cmd_client(fd, &frame, tokens[2]);
   }
 }
 
@@ -742,7 +777,7 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
   }  else if (strncmp(frame->kind, "DELETE", 6) == 0)  {
     // For the delete command we run the handler for it
     delete_cmd_server(fd, frame);
-  }  else if (strncmp(frame->kind, "GET") == 0)  {
+  }  else if (strncmp(frame->kind, "GET", 3) == 0)  {
     // For the get command
     get_cmd_server(fd, frame);
   }
@@ -750,6 +785,32 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
   return;
 }
 
+void list_print()  {
+  /* Outputs the contents of the stored objects*/
+  int         i, k, lines;
+  int         checker = 0;
+
+  std::cout << "Stored object table:" << std::endl;
+
+  // Loop through the different clients and output the stored data
+  for  (i = 0; i < NCLIENT; i++)  {
+    // Now loop through the map
+    for  (auto j : obj_list[i])  {
+      // Output
+      std::cout << "(owner= " << i + 1 << ", name= " << j.first << ")"
+      << std::endl;
+      lines = atoi(j.second[3]);
+      for (k = 0; k < lines; k++)  {
+        std::cout << "[" << k << "] '" << j.second[k] << "'" << std::endl;
+      }
+      checker++;
+    }
+  }
+  if (checker == 0)  {
+    // Need to create output for when there isn't an item saved
+    std::cout << "no objects saved" << std::endl;
+  }
+}
 
 //=============================================================================
 // Main functions
@@ -888,7 +949,7 @@ void server_main(int argc, char * argv[])  {
             exit(EXIT_SUCCESS);
 						
 					}  else if (strncmp(buffer, "list", 4) == 0)  {
-						std::cout << "List placeholder" << std::endl;
+						list_print();
 						
 					}
 				}

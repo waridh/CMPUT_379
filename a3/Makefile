@@ -9,8 +9,11 @@ all: a3w23
 a3s: a3w23
 	./$< -s 9722
 
-a3c: a3w23
+a3c1: a3w23
 	./$< -c 1 a3-ex1.dat 127.0.0.1 9722
+
+a3c2: a3w23
+	./$< -c 2 a3-ex1.dat localhost 9722
 
 # I like this girl, but I'm afraid she doesn't like me back.
 a3w23: a3w23.o
