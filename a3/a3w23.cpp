@@ -43,9 +43,10 @@ typedef struct  { char            msg[CONTLINE][PUTSZ];}      MSG_CHAR;
 typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c;} MSG;
 /* The full frame struct that contains the entire header and msg*/
 typedef struct  {
-  char kind[MAXWORD];
-  char obj[MAXWORD];
-  int lines;
+  char  kind[MAXWORD];
+  char  obj[MAXWORD];
+  int   id;
+  int   lines;
   MSG msg;
   } FRAME;
 
@@ -60,7 +61,7 @@ typedef struct  {
 clock_t                                 start = times(NULL); // For gtime
 int                                     list_count = 0; // Counting list
 static long                             clktck = 0; // Clk work
-std::map<int, std::string[CONTLINE]>    obj_list[NCLIENT];
+std::map<char *, char[4][PUTSZ]>    obj_list[NCLIENT];
 // We are holding the objs
 
 // Error checker for user input
@@ -83,16 +84,66 @@ void user_inpt_err(int argc, char * argv[])  {
 
 //=============================================================================
 // Utilities 1
-void send_2_items(int fd, char * msg1, char * msg2, char * src)  {
-  // When we are sending two things to the file descriptor
+void receiver_print(FRAME * frame)  {
+  // Outputting the received packet
+  char          buffer[MAXWORD];
+  int           i;
+  int           lines;
 
-  write(fd, msg1, sizeof(msg1));
-  usleep(50);  // I needed to add this so that the process doesn't break socket
-  write(fd, msg2, sizeof(msg2));
+  if (strncmp(frame->obj, "UNLOVED", 7) == 0)  {
+    // For when the packet does not have a msg
+    std::cout << "Received (src= " << frame->id << ") " << frame->kind << std::endl;
+    return;
+  }  else if (strncmp(frame->kind, "TIME", 4) == 0)  {
+    // For outputting for TIME packet
+    sprintf(buffer, "%0.2f", frame->msg.m_d.msg[0]);
+  }  else  {
+    // For most general cases
+    sprintf(buffer, "%s", frame->obj);
+  }
 
-  std::cout << "Transmitted (src= " << src << ") "
-  << "( " << msg1 << ", " << msg2 << ")" << std::endl;
+  std::cout << "Received (src= " << frame->id << ") "
+  << "(" << frame->kind << ":\t" << buffer << ")" << std::endl;
 
+  if (strncmp(frame->kind, "PUT", 3) == 0)  {
+    // Need to print out the content of the put packet
+    lines = atoi(obj_list[frame->id - 1][frame->obj][3]);
+    for (i = 0; i < lines; i++)  {
+      // Outputting the content that was received
+      std::cout << " [" << i << "]: '"
+      << obj_list[frame->id - 1][frame->obj][i] << "'" << std::endl;
+    }
+  }
+  return;
+}
+
+void transmitter_print(FRAME * frame)  {
+  // Outputting the received packet
+  char        buffer[MAXWORD];
+  int         i;
+
+  if (strncmp(frame->obj, "UNLOVED", 7) == 0)  {
+    // For when the packet does not have a msg
+    std::cout << "Transmitted (src= " << frame->id << ") " << frame->kind << std::endl;
+    return;
+  }  else if (strncmp(frame->kind, "TIME", 4) == 0)  {
+    // Checking for time
+    sprintf(buffer, "%0.2f", frame->msg.m_d.msg[0]);
+  }  else  {
+    // For most general cases
+    sprintf(buffer, "%s", frame->obj);
+  }
+
+  std::cout << "Transmitted (src= " << frame->id << ") "
+  << "(" << frame->kind << ":\t" << buffer << ")" << std::endl;
+  if  (strncmp(frame->kind, "PUT", 3) == 0)  {
+    // Special case for put
+    for (i = 0; i < frame->lines; i++)  {
+      // Looping the content out
+      std::cout << " [" << i << "]: '" << frame->msg.m_c.msg[i]
+      << "'" << std::endl;
+    }
+  }
   return;
 }
 
@@ -140,7 +191,7 @@ double gtime_cmd()  {
 	return seconds_passed;
 }
 
-int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid)  {
+int put_cmd_client(std::fstream &fp, std::string & objname, int fd, FRAME * frame)  {
   /* Since the object in put now has content, we need a function that can deal
   with it*/
   char            WSPACE[] = "\t ";
@@ -150,22 +201,21 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
   char            conbuff[PUTSZ + MAXWORD];
   char            sendingcont[CONTLINE][PUTSZ];
   FILE            * fp2 = fdopen(fd, "w");
-  FRAME           send_packet;
+  FRAME           inframe;
   MSG             msg;
   int             i;
   int             linecount;
   std::string     oneline;
 
   std::cout << std::endl;
-  memset( (char *) &send_packet, 0, sizeof(send_packet));
   memset( (char *) &msg, 0, sizeof(msg));
   // Establishing the frame
-  sprintf(send_packet.kind, "PUT");
-  strcpy(send_packet.obj, objname.c_str());
+  sprintf(frame->kind, "PUT");
+  strcpy(frame->obj, objname.c_str());
   while (std::getline(fp, oneline))  {
     // Grabbing the contents of the thing
     if (oneline == "}")  {
-      send_packet.lines = linecount;
+      frame->lines = linecount;
       break;
     }  else if (
       (oneline[0] == '#')
@@ -184,7 +234,8 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
       // The plan is to use strtok to get only the line.
       strcpy(conbuff, oneline.c_str());
       buffer = strtok(conbuff, WSPACE);
-      if (buffer == objname + ':')  {
+      sprintf(buffer2, "%s:", objname.c_str());
+      if (strncmp(buffer, buffer2, sizeof(buffer2)) == 0)  {
         // Checking if the name of the file is the same
         buffer = strtok(NULL, "\n");
         strcpy(msg.m_c.msg[linecount], buffer);
@@ -200,43 +251,69 @@ int put_cmd_client(std::fstream &fp, std::string & objname, int fd, char * cid) 
     }
   }
   // Now we want to write the packet and message to the thing
-  // strcpy(buffer2, objname.c_str());
-  // sprintf(buffer2, "%s\n", objname.c_str());
-  send_packet.msg = msg;
-  if (write(fd, (char *) &send_packet, sizeof(send_packet)) < 0)  {
+  std::cout << "Got pretty far" << std::endl;
+  frame->msg = msg;
+  if (write(fd, (char *) frame, sizeof(*frame)) < 0)  {
     // What the hey
     std::cout << "Failed to send the message" << std::endl;
   }
-  std::cout << "Sent: " << send_packet.obj << std::endl;
-  sprintf(buffer3, "%d", linecount);
+  transmitter_print(frame);
+
+  // Need to wait for server confirmation
+  if (read(fd, (char *) &inframe, sizeof(inframe)) < 1)  {
+    // Error check
+    std::cout << "Failed to receive the message from server" << std::endl;
+  }
+
+  receiver_print(&inframe);
   
-
-
-  // send_2_items(fd, "PUT", buffer, cid);
-  // for (i = 0; i < linecount; i++)  {
-  //   // Thingy
-  //   std::cout << sendingcont[i] << std::endl;
-  // }
   return 0;
 }
 
-int put_cmd_server(int cid, int fd, FRAME * frame)  {
+int put_cmd_server(int fd, FRAME * frame)  {
 	/* This function adds an object to the list. Updated to match with the new
   requisites */
   char              buffer[MAXWORD + 1];
+  int               i;
+  /*
+  TODO: Find out why the hell we are saying that it exists
+  */
+  // Unpacking the packet
+  if  (
+    obj_list[frame->id - 1].find(frame->obj) != obj_list[frame->id -1].end()
+    )  {
+      std::cout << obj_list[frame->id - 1][frame->obj] << std::endl;
+    // Checking if the key exists in the map
+    std::cout << std::endl;
+    receiver_print(frame);
+    // Need to create the error packet
+    memset((char *) frame, 0, sizeof(*frame));
+    frame->id = 0;
+    strcpy(frame->kind, "ERROR");
+    strcpy(frame->obj, "object already exists");
+    write(fd, (char *) frame, sizeof(*frame));
+    transmitter_print(frame);
 
-  // read(fd, buffer, sizeof(buffer));
-  std::cout << "This is buffer2: " << frame->obj << std::endl;
+    return -1;
+  }
 
-	// std::string				item_s = item;
-	// int								cidi = atoi(cid);
-	// if (obj_list[cidi].find(item_s) != obj_list[cidi].end())  {
-	// 	// Already exists, return an error
-	// 	return -1;
-	// }  else  {
-	// 	obj_list[cidi].insert(item_s);
-	// 	return 0;
-  // }
+  sprintf(obj_list[frame->id - 1][frame->obj][3], "%d", frame->lines);
+  for (i = 0; i < frame->lines; i++)  {
+
+    strcpy(obj_list[frame->id - 1][frame->obj][i], frame->msg.m_c.msg[i]);
+  }
+
+  // Print out what was received
+  std::cout << std::endl;
+  receiver_print(frame);
+
+  // Sending back ok packet
+  memset((char *) frame, 0, sizeof(*frame));
+  frame->id = 0;
+  strcpy(frame->kind, "OK");
+  strcpy(frame->obj, "UNLOVED");
+  write(fd, (char *) frame, sizeof(*frame));
+  return 0;
 }
 
 int get_cmd(char * cid, char * item)  {
@@ -280,7 +357,8 @@ int delete_cmd(char * cid, char * item)  {
 
 
 
-void client_reciever(int fd, char * src)  {
+
+void client_reciever(int fd)  {
   // Collects the response from the server
   char            buffer[MAXWORD];
   FRAME           inframe;
@@ -290,15 +368,8 @@ void client_reciever(int fd, char * src)  {
   // read(fd, buffer2, sizeof(buffer2));
   read(fd, (char *) &inframe, sizeof(inframe));
 
-  std::cout << std::endl;
+  receiver_print(&inframe);
 
-  std::cout << inframe.kind << std::endl;
-  if (strncmp(inframe.obj, "UNLOVED", 7) == 0)  {
-    // This is the message for no message
-    std::cout << "Received (src= " << src << ") " << buffer << std::endl;
-    return;
-  }
-  
   // If the server wants the client to quit
   if (strncmp(inframe.kind, "QUIT", 4) == 0)  {
     // The QUIT packet was sent back
@@ -317,30 +388,12 @@ void client_reciever(int fd, char * src)  {
       // I guess the server just wants the client to quit? Implementing it.
       quit_cmd(fd);
     }
-  }  else if (strncmp(inframe.kind, "TIME", 4) == 0)  {
-    // Recieved the time command
-    sprintf(buffer, "%0.2f", inframe.msg.m_d.msg[0]);
   }
-  std::cout << "Received (src= " << src << ") " << "( " 
-  << inframe.kind << ": " << buffer << " )" << std::endl;
 
   return;
 }
 
-void server_receiver_print(int cid, char * packet, char * msg)  {
-  // Outputting the received packet from the client
 
-  std::cout << std::endl;
-  if (strncmp(msg, "UNLOVED", 7) == 0)  {
-    // For when the packet does not have a msg
-    std::cout << "Received (src= client:" << cid << ") " << packet << std::endl;
-    return;
-  }
-
-  std::cout << "Received (src= client:" << cid << ") "
-  << "(" << packet << ": " << msg << ")" << std::endl;
-  return;
-}
 
 void tokenizer(char * cmdline, std::string * tokens)  {
   /* Goal here is to tokenize the c string input*/
@@ -484,11 +537,10 @@ int confirm_connection_server(int fd)  {
 
 }
 
-void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
+void client_transmitter(int fd, std::string * tokens, std::fstream & fp, int src)  {
   // Sending and recieving the thing without blocking
   char        buffer[MAXWORD];
   char        buffer2[MAXWORD];
-  char        * fromwho = "server";
   FRAME       frame;
   MSG         msg;
   std::string contents[CONTLINE];
@@ -497,27 +549,35 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp)  {
   memset( (char *) &frame, 0, sizeof(frame));
   memset( (char *) &msg, 0, sizeof(msg));
 
+  frame.id = src;
+
   if (tokens[1] == "delay")  {
     // First check if for delay
     delay_cmd(tokens[2]);
     return;
   }  else if (tokens[1] == "gtime")  {
-    // Asking for the time since server began 
+    // Asking for the time since server began
+    // Making the output packet 
     strcpy(frame.kind, "GTIME");
+    strcpy(frame.obj, "UNLOVED");
+    // Sending the output packet
     write(fd, (char *) &frame, sizeof(frame));
-    // Using the gtime function, we send the packet
-    client_reciever(fd, fromwho);
+    std::cout << std::endl;
+    transmitter_print(&frame);  // Printing to terminal what we sent
+
+    client_reciever(fd);  // Waiting for server response
   }  else if (tokens[1] == "quit")  {
     // We want to send to the server so that it knows we want to appropriately
     // quit
-    strcpy(buffer, "QUIT");
-    write(fd, buffer, sizeof(buffer));
-    client_reciever(fd, fromwho);
+    strcpy(frame.kind, "QUIT");
+    strcpy(frame.obj, "UNLOVED");
+    write(fd, (char *) &frame, sizeof(frame));
+    client_reciever(fd);
   }  else if (tokens[1] == "put")  {
     /* Handling the put command. Since we also need the name of the object, we
     will just send this into another function*/
-    strcpy(buffer, tokens[0].c_str());
-    put_cmd_client(fp, tokens[2], fd, buffer);
+  
+    put_cmd_client(fp, tokens[2], fd, &frame);
 
   }
 }
@@ -527,9 +587,9 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
   char        buffer[MAXWORD];
   char        packet[MAXWORD];
   char        msgout[MAXWORD];
-  char        * src = "server";
   double      gtimer;
   int         len;
+  int         src = 0;
   FRAME       frameout;
   MSG         msg;
 
@@ -542,18 +602,19 @@ void server_receiver(int cid, int fd, FRAME * frame)  {
     // Clearing the struct being sent back
     memset((char *) &frameout, 0, sizeof(frameout));
     memset((char *) &msg, 0, sizeof(msg));
-
-    std::cout << "Just got GTIME" << std::endl;
-    gtimer = gtime_cmd();  // Getting the time since program began
+    std::cout << std::endl;
+    receiver_print(frame);
     // Making output packet and msg
     strcpy(frameout.kind, "TIME");
-    // sprintf(msgout, "%0.2f", gtimer);
-    frameout.msg.m_d.msg[0] = gtimer;
-    // send_2_items(fd, packet, msgout, src);
+    frameout.id = src;
+    frameout.msg.m_d.msg[0] = gtime_cmd(); // Time since program began
+    // Writing the time packet back
     write(fd, (char *) &frameout, sizeof(frameout));
 
+    transmitter_print(&frameout);
+
   }  else if (strncmp(frame->kind, "PUT", 3) == 0)  {
-    put_cmd_server(cid, fd, frame);
+    put_cmd_server(fd, frame);
   }
 
   return;
@@ -589,7 +650,7 @@ void client_sendcmds(int fd, int cid, char * filename)  {
     tokenizer(buff0, tokens);
     strcpy(buffer, tokens[1].c_str());
     std::cout << cmdline << std::endl;
-    client_transmitter(fd, tokens, fp);
+    client_transmitter(fd, tokens, fp, cid);
   }
 
   return;
@@ -660,7 +721,10 @@ void server_main(int argc, char * argv[])  {
   struct pollfd       pollfds[2 + NCLIENT];
   struct sockaddr_in  frominfo;
   socklen_t           frominfolen;
-
+  /*
+  TODO: Figure out what is wrong with the socket, cause the stuff is losing
+        connections
+  */
   // Final error check
   if (argc != 3)  {
     // Not the right amount of arguments
