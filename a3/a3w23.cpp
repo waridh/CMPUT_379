@@ -160,7 +160,10 @@ void transmitter_print(FRAME * frame)  {
     << frame->id << ")" << std::endl;
     return;
   }
-  if (strncmp(frame->obj, "UNLOVED", 7) == 0)  {
+  if (
+    (strncmp(frame->obj, "UNLOVED", 7) == 0)
+    || (strncmp(frame->kind, "OK", 2) == 0)
+    )  {
     // For when the packet does not have a msg
     std::cout << "Transmitted (src= " << frame->id << ") " << frame->kind << std::endl;
     return;
@@ -205,7 +208,7 @@ void quit_cmd(int fd)  {
   clock_t           end;
 
 
-	std::cout << "do_client: client closing connection" << std::endl;
+	std::cout << "do_client: client closing connection" << std::endl << std::endl;
   end = times(&cpu2);
   timeprint(start, end, cpu1, cpu2);
 	close(fd);
@@ -832,7 +835,7 @@ void list_print()  {
   int         i, k, lines;
   int         checker = 0;
 
-  std::cout << "Stored object table:" << std::endl;
+  std::cout << std::endl << "Stored object table:" << std::endl;
 
   // Loop through the different clients and output the stored data
   for  (i = 0; i < NCLIENT; i++)  {
@@ -941,6 +944,7 @@ void server_main(int argc, char * argv[])  {
   // The main function for the server
 
   char                buffer[MAXWORD];
+  clock_t             endtime;
   int                 buffd;
   int                 cid;
   int                 connected_clients = 0;
@@ -952,6 +956,7 @@ void server_main(int argc, char * argv[])  {
   FRAME               frame;
   struct pollfd       pollfds[2 + NCLIENT];
   struct sockaddr_in  frominfo;
+  struct tms          cpu2;
   socklen_t           frominfolen;
   /*
   TODO: Figure out what is wrong with the socket, cause the stuff is losing
@@ -982,11 +987,18 @@ void server_main(int argc, char * argv[])  {
 
 				if (fgets(buffer, MSGSZ, stdin))  {
 					if (strncmp(buffer, "quit", 4) == 0)  {
-						std::cout << "Quitting" << std::endl;
+            std::cout << std::endl;
+						std::cout << "quitting" << std::endl;
+            std::cout << "do_server: server closing main socket (";
             for (int i = 0; i < 2 + NCLIENT; i++) {
               // Closing all the file descriptors from this side
-              close(pollfds[i].fd);
+              // TODO: Ask what the heck is this
+              std::cout << "done[" << i+1 << "]= " << close(pollfds[1].fd) + 1
+              << ", ";
             }
+            std::cout << ")" << std::endl << std::endl;
+            endtime = times(&cpu2);
+            timeprint(start, endtime, cpu1, cpu2);
             exit(EXIT_SUCCESS);
 						
 					}  else if (strncmp(buffer, "list", 4) == 0)  {
@@ -1035,19 +1047,21 @@ void server_main(int argc, char * argv[])  {
           len = read(pollfds[2 + i].fd, (char *) &frame, sizeof(frame));
           if (len == 0)  {
             // When we lose connection with the client
-            std::cout << "lost connection to client " << connections[i]
+            std::cout << std::endl
+            << "rcvFrame: received frame has zero length." << std::endl;
+            std::cout << "server lost connection to client " << connections[i]
             << std::endl;
             connections[i] = 0;
             continue;
           }  else if (strncmp(frame.kind, "DONE", 4) == 0)  {
             // If the client sends the quit packet to the server
+            std::cout << std::endl;
+            receiver_print(&frame);
             frame.id = 0;
             strcpy(frame.kind, "OK");
             strcpy(frame.obj, "@@@ILOVEYOU");
             write(pollfds[2 + i].fd, (char *) &frame, sizeof(frame));
-            std::cout << std::endl;
-            std::cout << "client " << connections[i] << " is disconnected"
-            << std::endl;
+            transmitter_print(&frame);
 
             close(pollfds[2 + i].fd);
 
