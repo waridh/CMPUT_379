@@ -1018,11 +1018,10 @@ void server_main(int argc, char * argv[])  {
             std::cout << "do_server: server closing main socket (";
             for (int i = 0; i < 2 + NCLIENT; i++) {
               // Closing all the file descriptors from this side
-              // TODO: Ask what the heck is this
-              std::cout << "done[" << i+1 << "]= " << close(pollfds[1].fd) + 1
-              << ", ";
+              close(pollfds[1].fd);
+              
             }
-            std::cout << ")" << std::endl << std::endl;
+            std::cout << " done!)" << std::endl << std::endl;
             endtime = times(&cpu2);
             timeprint(start, endtime, cpu1, cpu2);
             exit(EXIT_SUCCESS);
@@ -1097,6 +1096,8 @@ void server_main(int argc, char * argv[])  {
             transmitter_print(&frame);
 
             close(pollfds[2 + i].fd);
+            std::cout << "Closed connection to client " << connections[i]
+            << std::endl;
 
             connections[i] = 0;
             connected_clients--;
