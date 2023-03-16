@@ -88,7 +88,6 @@ void receiver_print(FRAME * frame)  {
   // Outputting the received packet
   char          buffer[MAXWORD];
   int           i;
-  int           lines;
   std::string   key;
 
   if (
@@ -127,6 +126,12 @@ void transmitter_print(FRAME * frame)  {
   char        buffer[MAXWORD];
   int         i;
 
+  if (strncmp(frame->kind, "HELLO", 5) == 0)  {
+    // When we send the HELLO packet
+    std::cout << "Transmitted (src= " << frame->id << ") (HELLO, idNumber= "
+    << frame->id << ")" << std::endl;
+    return;
+  }
   if (strncmp(frame->obj, "UNLOVED", 7) == 0)  {
     // For when the packet does not have a msg
     std::cout << "Transmitted (src= " << frame->id << ") " << frame->kind << std::endl;
@@ -206,13 +211,9 @@ int put_cmd_client(
   char            WSPACE[] = "\t ";
   char            * buffer;
   char            buffer2[MAXWORD + 1];
-  char            buffer3[MAXWORD + 1];
   char            conbuff[PUTSZ + MAXWORD];
-  char            sendingcont[CONTLINE][PUTSZ];
-  FILE            * fp2 = fdopen(fd, "w");
   FRAME           inframe;
   MSG             msg;
-  int             i;
   int             linecount;
   std::string     oneline;
 
@@ -257,6 +258,11 @@ int put_cmd_client(
           exit(EXIT_FAILURE);
         }
       }
+      /*
+      TODO:
+      So in the commented out code, we were actually able to isolate the
+      content without the stuff. Actually, just check at the lab tomorrow.
+      */
     }
   }
   // Now we want to write the packet and message to the thing
@@ -281,7 +287,6 @@ int put_cmd_client(
 int put_cmd_server(int fd, FRAME * frame)  {
 	/* This function adds an object to the list. Updated to match with the new
   requisites */
-  char              buffer[MAXWORD + 1];
   int               i;
   std::string       key(frame->obj);
   // Unpacking the packet
@@ -368,7 +373,6 @@ int get_cmd_server(int fd, FRAME * frame)  {
   */
   int           i;
   int           j;
-  int           lines;
   FRAME         outframe;
   MSG           msg;
   std::string   key(frame->obj);
@@ -460,14 +464,7 @@ int delete_cmd_client(int fd, FRAME * frame, std::string & objname)  {
   This is the client side of the delete command. Simply should just send a
   packet, and then wait to receive the response from the server.
   */
-  char            * buffer;
-  char            buffer2[MAXWORD + 1];
-  char            buffer3[MAXWORD + 1];
-  char            conbuff[PUTSZ + MAXWORD];
-  char            sendingcont[CONTLINE][PUTSZ];
   FRAME           inframe;
-  int             i;
-  int             linecount;
   std::string     oneline;
 
   std::cout << std::endl;
@@ -502,7 +499,6 @@ int delete_cmd_client(int fd, FRAME * frame, std::string & objname)  {
 
 void client_reciever(int fd)  {
   // Collects the response from the server
-  char            buffer[MAXWORD];
   FRAME           inframe;
 
   // Getting the first packet
@@ -555,7 +551,6 @@ int client_connect(const char * ip_name, int port_number)  {
   // Connects the client to the server, and returns the file descriptor
   // Got a lot of these code from the eclass example
 
-  int                   ip_addr;
   int                   sfd;
   struct hostent        *hostinfo;
   struct sockaddr_in    server_addr;
@@ -632,7 +627,6 @@ void server_poll_struct_set(struct pollfd pollstruct[])  {
 
 int confirm_connection_client(int fd, int cid)  {
   // This function sends HELLO and the cid Returns of error
-  char            buffer[MAXWORD];
   int             len;
   FRAME           starterframe;
 
@@ -645,6 +639,8 @@ int confirm_connection_client(int fd, int cid)  {
     std::cout << "Couldn't write HELLO packet. Quitting" << std::endl;
     exit(EXIT_FAILURE);
   }
+  std::cout << std::endl;
+  transmitter_print(&starterframe);
   // Waiting for confirmation from server
   memset((char *) &starterframe, 0, sizeof(starterframe));
   len = read(fd, &starterframe, sizeof(starterframe));
@@ -655,7 +651,6 @@ int confirm_connection_client(int fd, int cid)  {
 
 int confirm_connection_server(int fd)  {
   // The server making sure the client sends a HELLO packet. Returns the CID
-  char            buffer[MAXWORD];
   int             cid;
   int             len;
   FRAME           instarter;
@@ -691,8 +686,6 @@ int confirm_connection_server(int fd)  {
 
 void client_transmitter(int fd, std::string * tokens, std::fstream & fp, int src)  {
   // Sending and recieving the thing without blocking
-  char        buffer[MAXWORD];
-  char        buffer2[MAXWORD];
   FRAME       frame;
   MSG         msg;
   std::string contents[CONTLINE];
@@ -742,11 +735,6 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp, int src
 
 void server_receiver(int cid, int fd, FRAME * frame)  {
   // This function will recieve the packets from the client
-  char        buffer[MAXWORD];
-  char        packet[MAXWORD];
-  char        msgout[MAXWORD];
-  double      gtimer;
-  int         len;
   int         src = 0;
   FRAME       frameout;
   MSG         msg;
@@ -820,7 +808,6 @@ void client_sendcmds(int fd, int cid, char * filename)  {
   fd specified. */
   char            buff0[MAXWORD];
   char            buffer[MAXWORD];
-  char            filecont[CONTLINE][PUTSZ];
   std::fstream    fp(filename);
   std::string     cmdline;
   std::string     tokens[TOKSZ];
@@ -851,8 +838,6 @@ void client_main(int argc, char * argv[])  {
   /* This is the main function for client */
 
   // Initialization
-  char            ip_name[30];
-  char            buffer[MAXWORD];
   int             cid;
   int             fd;
   int             port_number;
@@ -901,10 +886,7 @@ void server_main(int argc, char * argv[])  {
   int                 connected_clients = 0;
   int                 connections[NCLIENT] = {0};
   int                 i;
-  int                 index;
   int                 len;
-  int                 sid = 0;
-  int                 sfd;
   int                 clientfds[NCLIENT];
   int                 port_number;
   int                 timeout = 100;
