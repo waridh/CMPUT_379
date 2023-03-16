@@ -526,11 +526,15 @@ void client_reciever(int fd)  {
       // I guess the server just wants the client to quit? Implementing it.
       quit_cmd(fd);
     }
+  }  else if  (
+    (strncmp(inframe.kind, "OK", 2) == 0)
+    && (strncmp(inframe.obj, "@@@ILOVEYOU", 12) == 0))  {
+    // For proper exits
+    quit_cmd(fd);
   }
 
   return;
 }
-
 
 
 void tokenizer(char * cmdline, std::string * tokens)  {
@@ -608,7 +612,9 @@ int server_socket(int port_number)  {
   }
   // Setting up amount of listeners
   listen(sfd, NCLIENT);
-  std::cout << "Server set up" << std::endl;
+  std::cout << "a3w23: do_server" << std::endl;
+  std::cout << "Server is accepting connections (port= " << port_number
+  << ")" << std::endl;
   return sfd;
 }
 
@@ -661,6 +667,14 @@ int confirm_connection_server(int fd)  {
 
   // Reading buffer and then checking if it is appropriate
   len = read(fd, (char *) &instarter, sizeof(instarter));
+
+  if (len <= 0)  {
+    // Error handling
+    std::cout << "The server failed to read the HELLO packet. Disconnecting"
+    << std::endl;
+    close(fd);
+    return -1;
+  }
   if (strncmp(instarter.kind, "HELLO", 5) == 0)  {
     // Checking packet
     cid = instarter.id;
@@ -679,6 +693,7 @@ int confirm_connection_server(int fd)  {
   }  else  {
     // Did not get the HELLO packet
     std::cout << "Did not recieve the HELLO packet, disconnecting" << std::endl;
+    close(fd);
     return -1;
   }
 
@@ -714,9 +729,12 @@ void client_transmitter(int fd, std::string * tokens, std::fstream & fp, int src
   }  else if (tokens[1] == "quit")  {
     // We want to send to the server so that it knows we want to appropriately
     // quit
-    strcpy(frame.kind, "QUIT");
+    strcpy(frame.kind, "DONE");
     strcpy(frame.obj, "UNLOVED");
     write(fd, (char *) &frame, sizeof(frame));
+    // Notifying the client that we have sent the DONE packet
+    std::cout << std::endl;
+    transmitter_print(&frame);
     client_reciever(fd);
   }  else if (tokens[1] == "put")  {
     /* Handling the put command. Since we also need the name of the object, we
@@ -811,7 +829,7 @@ void client_sendcmds(int fd, int cid, char * filename)  {
   std::fstream    fp(filename);
   std::string     cmdline;
   std::string     tokens[TOKSZ];
-  std::cout << filename << std::endl;
+
 
   while (std::getline(fp, cmdline))  {
 		// Loop for grabbing cmd lines from the client file
@@ -859,6 +877,13 @@ void client_main(int argc, char * argv[])  {
   cid = atoi(argv[2]);
   port_number = atoi(argv[5]);
 
+  std::cout << std::endl;
+
+  std::cout << "main: do_client (idNumber= " << cid << ", inputFile= '"
+  << argv[3] << "')" << std::endl;
+
+  std::cout << "\t" << "(server= '" << argv[4] << "', port= " << port_number
+  << ")" << std::endl;
 	// Socket initialization
   fd = client_connect(argv[4], port_number);
 
@@ -887,7 +912,6 @@ void server_main(int argc, char * argv[])  {
   int                 connections[NCLIENT] = {0};
   int                 i;
   int                 len;
-  int                 clientfds[NCLIENT];
   int                 port_number;
   int                 timeout = 100;
   FRAME               frame;
@@ -980,12 +1004,12 @@ void server_main(int argc, char * argv[])  {
             << std::endl;
             connections[i] = 0;
             continue;
-          }  else if (strncmp(frame.kind, "QUIT", 4) == 0)  {
+          }  else if (strncmp(frame.kind, "DONE", 4) == 0)  {
             // If the client sends the quit packet to the server
-            
-            write(pollfds[2 + i].fd, buffer, sizeof(buffer));
-            strcpy(buffer, "UNLOVED");
-            write(pollfds[2 + i].fd, buffer, sizeof(buffer));
+            frame.id = 0;
+            strcpy(frame.kind, "OK");
+            strcpy(frame.obj, "@@@ILOVEYOU");
+            write(pollfds[2 + i].fd, (char *) &frame, sizeof(frame));
             std::cout << std::endl;
             std::cout << "client " << connections[i] << " is disconnected"
             << std::endl;
