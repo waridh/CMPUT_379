@@ -10,10 +10,10 @@ a3s: a3w23
 	./$< -s 9722
 
 a3c1: a3w23
-	./$< -c 1 a3-ex1.dat 127.0.0.1 9722
+	./$< -c 1 a3-cus1.dat 127.0.0.1 9722
 
 a3c2: a3w23
-	./$< -c 2 a3-ex1.dat localhost 9722
+	./$< -c 2 a3-cus1.dat localhost 9722
 
 # I like this girl, but I'm afraid she doesn't like me back.
 a3w23: a3w23.o
@@ -28,7 +28,7 @@ fmt.man:
 
 # Making a tarball
 tar: clean
-	tar -czvf wongwandanee-a3.tar.gz a3w23.cpp Makefile wongwandanee-a3-typeset.pdf a2p2-ex1.dat a2p2.data
+	tar -czvf wongwandanee-a3.tar.gz a3w23.cpp Makefile a3-ex1.dat README.md
 
 # For cleaning
 .PHONY: clean

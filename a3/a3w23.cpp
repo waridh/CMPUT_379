@@ -120,7 +120,9 @@ void receiver_print(FRAME * frame)  {
 
   if (
     (strncmp(frame->obj, "UNLOVED", 7) == 0)
-    || (strncmp(frame->kind, "OK", 2) == 0))  {
+    || (strncmp(frame->kind, "OK", 2) == 0)
+    || (strncmp(frame->kind, "QUIT", 4) == 0)
+    )  {
     // For when the packet does not have a msg
     std::cout << "Received (src= " << frame->id << ") " << frame->kind << std::endl;
 
@@ -163,6 +165,7 @@ void transmitter_print(FRAME * frame)  {
   if (
     (strncmp(frame->obj, "UNLOVED", 7) == 0)
     || (strncmp(frame->kind, "OK", 2) == 0)
+    || (strncmp(frame->kind, "QUIT", 4) == 0)
     )  {
     // For when the packet does not have a msg
     std::cout << "Transmitted (src= " << frame->id << ") " << frame->kind << std::endl;
@@ -547,14 +550,18 @@ void client_reciever(int fd)  {
     // The QUIT packet was sent back
     if (strncmp(inframe.obj, "ALCONN", 6) == 0)  {
       // The same client ID was already connected
+      std::cout << std::endl;
       std::cout << "A client with this ID has already been connected"
       << std::endl;
       std::cout << "Please try again later" << std::endl;
+      
       quit_cmd(fd);
     }  else if (strncmp(inframe.obj, "TOOLRG", 6) == 0)  {
       // This client ID is above the limit size
+      std::cout << std::endl;
       std::cout << "This client ID is above the maximum allowed" << std::endl;
       std::cout << "Please try again later" << std::endl;
+      std::cout << std::endl;
       quit_cmd(fd);
     }  else  {
       // I guess the server just wants the client to quit? Implementing it.
@@ -688,13 +695,16 @@ int confirm_connection_client(int fd, int cid)  {
   transmitter_print(&starterframe);
   // Waiting for confirmation from server
   memset((char *) &starterframe, 0, sizeof(starterframe));
-  len = read(fd, &starterframe, sizeof(starterframe));
+
+  client_reciever(fd);
+  //len = read(fd, &starterframe, sizeof(starterframe));
   
-  receiver_print(&starterframe);
+  //receiver_print(&starterframe);
+  
   return 0;
 }
 
-int confirm_connection_server(int fd)  {
+int confirm_connection_server(int fd, int connections[NCLIENT])  {
   // The server making sure the client sends a HELLO packet. Returns the CID
   int             cid;
   int             len;
@@ -713,13 +723,29 @@ int confirm_connection_server(int fd)  {
     << std::endl;
     close(fd);
     return -1;
-  }
-  if (strncmp(instarter.kind, "HELLO", 5) == 0)  {
+  }  else if (strncmp(instarter.kind, "HELLO", 5) == 0)  {
     // Checking packet
     cid = instarter.id;
     std::cout << std::endl;
     std::cout << "Recieved (src= " << cid << ") (HELLO, idNumber= "
     << instarter.id << ")" << std::endl;
+
+    if (connections[cid - 1] != 0)  {
+      // There is already a client with this ID
+      std::cout << "A connection with the same client ID already exists"
+      << std::endl;
+      memset((char *) &instarter, 0, sizeof(instarter));
+      instarter.id = 0;
+      strcpy(instarter.kind, "QUIT");
+      strcpy(instarter.obj, "ALCONN");
+      sprintf(instarter.msg.m_c.msg[0], "ID already connected");
+      write(fd, (char *) &instarter, sizeof(instarter));
+      transmitter_print(&instarter);
+      close(fd);
+      // Need to forget about this cid, so I guess I will just continue the
+      // loop
+      return -1;
+    }
     
     // Prepping to send back the OK packet
     memset((char *) &instarter, 0, sizeof(instarter));
@@ -1017,14 +1043,19 @@ void server_main(int argc, char * argv[])  {
           (SA *) &frominfo,
           &frominfolen
         );
-
-        cid = confirm_connection_server(buffd);  // Pain
-        if (connections[cid - 1] != 0)  {
-          // There is already a client with this ID
-          std::cout << "A connection with the same client ID already exists"
+        if  (buffd == -1)  {
+          // Accept failed
+          std::cout << "Failed to accept the client. Please try again."
           << std::endl;
 
-          // Need to forget about this cid, so I guess I will jsut continue the
+          continue;
+        }
+
+        cid = confirm_connection_server(buffd, connections);  // Pain
+        if (cid == -1)  {
+          // There is already a client with this ID
+          
+          // Need to forget about this cid, so I guess I will just continue the
           // loop
           continue;
         }  else  {
@@ -1052,6 +1083,8 @@ void server_main(int argc, char * argv[])  {
             std::cout << "server lost connection to client " << connections[i]
             << std::endl;
             connections[i] = 0;
+            connected_clients--;
+            close(pollfds[2 + i].fd);
             continue;
           }  else if (strncmp(frame.kind, "DONE", 4) == 0)  {
             // If the client sends the quit packet to the server
@@ -1066,6 +1099,7 @@ void server_main(int argc, char * argv[])  {
             close(pollfds[2 + i].fd);
 
             connections[i] = 0;
+            connected_clients--;
             continue;
           }
           /* Receives and sends back the appropriate packet*/
