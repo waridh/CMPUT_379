@@ -40,7 +40,7 @@ typedef struct  { double          msg[CONTLINE];}             MSG_DOUBLE;
 /* This substruct contains the character lines*/
 typedef struct  { char            msg[CONTLINE][PUTSZ];}      MSG_CHAR;
 // Trying to use structs instead of sending bunch of strings.
-typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c;} MSG;
+typedef union   { MSG_DOUBLE m_d; MSG_CHAR m_c;}              MSG;
 /* The full frame struct that contains the entire header and msg*/
 typedef struct  {
   char  kind[MAXWORD];
@@ -57,8 +57,8 @@ typedef struct  {
 
 //=============================================================================
 // Global variables
-
-clock_t                                 start = times(NULL); // For gtime
+struct tms                              cpu1;
+clock_t                                 start = times(&cpu1); // For gtime
 int                                     list_count = 0; // Counting list
 static long                             clktck = 0; // Clk work
 std::map<std::string, char[4][PUTSZ]>        obj_list[NCLIENT];
@@ -84,6 +84,34 @@ void user_inpt_err(int argc, char * argv[])  {
 
 //=============================================================================
 // Utilities 1
+
+void timeprint(
+	clock_t &time1,
+	clock_t &time2,
+	struct tms &cpu1,
+	struct tms &cpu2)  {
+	/* This function will try to print to format of figure 8.31. We are using the
+testbook: Advanced Programming in the UNIX Environment third Edition*/
+	static long clktck = 0;
+	if (clktck == 0)  {  // If we don't already have the tick
+		clktck=sysconf(_SC_CLK_TCK);
+		if (clktck < 0)  {
+			std::cout << "sysconf error" << std::endl;  // Error handling from apue
+			exit(EXIT_FAILURE);
+		}
+	}
+	// Most of the code is gathered from the APUE textbook here
+  clock_t real = time2 - time1;
+  printf(" real: %7.2f sec.\n", real / (double) clktck);
+  printf(" user: %7.2f sec.\n",
+  (cpu2.tms_utime - cpu1.tms_utime) / (double) clktck);
+  printf(" sys: %7.2f sec.\n",
+  (cpu2.tms_stime - cpu1.tms_stime) / (double) clktck);
+  
+	return;
+}
+
+
 void receiver_print(FRAME * frame)  {
   // Outputting the received packet
   char          buffer[MAXWORD];
@@ -173,7 +201,13 @@ void delay_cmd(std::string delaytime)  {
 
 void quit_cmd(int fd)  {
 	/* This is for when the server sends the quit cmd back to the client*/
-	std::cout << "quitting" << std::endl;
+  struct tms        cpu2;
+  clock_t           end;
+
+
+	std::cout << "do_client: client closing connection" << std::endl;
+  end = times(&cpu2);
+  timeprint(start, end, cpu1, cpu2);
 	close(fd);
 	exit(EXIT_SUCCESS);
 }
@@ -494,9 +528,6 @@ int delete_cmd_client(int fd, FRAME * frame, std::string & objname)  {
 //=============================================================================
 // Utilities
 
-
-
-
 void client_reciever(int fd)  {
   // Collects the response from the server
   FRAME           inframe;
@@ -573,11 +604,13 @@ int client_connect(const char * ip_name, int port_number)  {
   memcpy((char *) &server_addr.sin_addr, hostinfo->h_addr, hostinfo->h_length);
   server_addr.sin_family= AF_INET;
   server_addr.sin_port= htons(port_number);
+  
   // create a socket using TCP
   if ((sfd = socket(AF_INET, SOCK_STREAM, 0)) < 0)  {
     std::cout << "Client failed to create a socket" << std::endl;
     exit(EXIT_FAILURE);
   }
+
   // Connecting to server
   if (connect(sfd, (SA *) &server_addr, sizeof(server_addr)) < 0)  {
     std::cout << "Client failed to connect to server" << std::endl;
@@ -612,6 +645,9 @@ int server_socket(int port_number)  {
   }
   // Setting up amount of listeners
   listen(sfd, NCLIENT);
+
+  // Program start message
+  std::cout << std::endl;
   std::cout << "a3w23: do_server" << std::endl;
   std::cout << "Server is accepting connections (port= " << port_number
   << ")" << std::endl;
@@ -845,7 +881,6 @@ void client_sendcmds(int fd, int cid, char * filename)  {
     strcpy(buff0, cmdline.c_str());
     tokenizer(buff0, tokens);
     strcpy(buffer, tokens[1].c_str());
-    std::cout << cmdline << std::endl;
     client_transmitter(fd, tokens, fp, cid);
   }
 

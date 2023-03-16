@@ -42,7 +42,10 @@
 1 gtime
 1 get index2.html
 1 get index3.html
+1 get index69.html
 1 delete img2.jpg
+1 delete index420.png
+1 delete index69.html
 1 delay 3000
 
 2 get index1.html
