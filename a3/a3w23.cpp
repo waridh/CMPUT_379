@@ -1086,14 +1086,18 @@ void server_main(int argc, char * argv[])  {
             close(pollfds[2 + i].fd);
             continue;
           }  else if (strncmp(frame.kind, "DONE", 4) == 0)  {
-            // If the client sends the quit packet to the server
+            // If the client sends the quit packet to the server, we want to
+            // exit
             std::cout << std::endl;
             receiver_print(&frame);
+
+            // Formatting the frame to tell the client to turn off
+            memset((char *) &frame, 0, sizeof(frame));
             frame.id = 0;
             strcpy(frame.kind, "OK");
             strcpy(frame.obj, "@@@ILOVEYOU");
             write(pollfds[2 + i].fd, (char *) &frame, sizeof(frame));
-            transmitter_print(&frame);
+            transmitter_print(&frame);  // Tell the terminal
 
             close(pollfds[2 + i].fd);
             std::cout << "Closed connection to client " << connections[i]
