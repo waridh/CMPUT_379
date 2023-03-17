@@ -28,7 +28,7 @@ fmt.man:
 
 # Making a tarball
 tar: clean
-	tar -czvf wongwandanee-a3.tar.gz a3w23.cpp Makefile a3-ex1.dat README.md README.pdf
+	tar -czvf wongwandanee-a3.tar.gz a3w23.cpp Makefile a3-cus1.dat README.md README.pdf
 
 # For cleaning
 .PHONY: clean
