@@ -21,4 +21,4 @@ tar: clean
 # For cleaning
 .PHONY: clean
 clean:
-	rm -f *.o fmt.man a3w23 *.tar.gz
+	rm -f *.o a4w23 *.tar.gz
