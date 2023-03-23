@@ -6,7 +6,7 @@ C_FLAGS = -std=c++11 -g -Wall
 all: a4w23
 
 
-# I like this girl, but I'm afraid she doesn't like me back.
+# This creates the main executable. It's linking pthreads
 a4w23: a4w23.o
 	$(CC) -pthread -o $@ $<
 
@@ -16,7 +16,7 @@ a4w23.o: a4w23.cpp
 
 # Making a tarball
 tar: clean
-	tar -czvf wongwandanee-a4.tar.gz a4w23.cpp Makefile README.md README.pdf
+	tar -czvf wongwandanee-a4.tar.gz a4w23.cpp a4w23.h Makefile README.md README.pdf
 
 # For cleaning
 .PHONY: clean

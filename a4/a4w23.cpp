@@ -1,3 +1,4 @@
+// a4w23.cpp
 /*
 The final assignment for CMPUT 379
   name: Waridh 'Bach' Wongwandanee
@@ -10,17 +11,31 @@ multiple files. That seems more annoying for submission. I will try using a
 header file though.*/
 
 // Libraries
+#include "a4w23.h"
 #include <cstring>
 #include <fcntl.h>
 #include <iostream>
+#include <map>
 #include <pthread.h>
+#include <string>
 #include <unistd.h>
+#include <unordered_map>
+
+// Define
+
+#define MAXWORD         32
+#define NRES_TYPES      10
+#define NTASKS          25
 
 // Global variables
 
 int                 NITER;
+RESOURCES_T         RESOURCE_MAP;
+AVAILR_T            AVAILR_MAP;
 
 // Critical sections
+
+int                 something;
 
 //=============================================================================
 // Error handling
@@ -91,6 +106,15 @@ void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
 }
 
 //=============================================================================
+// String parser
+
+void resource_gatherer(std::string * resource_line)  {
+  /* We want to read the resources from the file*/
+}
+
+
+
+//=============================================================================
 // Thread functions
 
 void * monitor_thread(void * arg)  {
@@ -98,13 +122,21 @@ void * monitor_thread(void * arg)  {
   int *         monitorTime = (int *) arg;
   int           test = 0;
 
+  // Implement thread synchronization so that we don't get unexpected thing
 
   while (1)  {
-    std::cout << "Testing, lol: " << test << std::endl;
+    std::cout << "montor: " << test << std::endl;
     usleep((*monitorTime) * 1000);
     test++;
   }
   return NULL;
+}
+
+void * task_thread(void * arg)  {
+  /* Simulates the task required by the assignment*/
+  
+
+  pthread_exit(NULL);
 }
 
 int  main(int argc, char * argv[])  {

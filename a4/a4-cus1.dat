@@ -1,0 +1,7 @@
+# This is my custom testing file 1
+
+resources bach:1 love:8 yourmom:1
+
+task    t1  50  100 bach:1 yourmom:1
+task    t2  50  100 love:1  bach:1
+task    t3  50  100 love:2  yourmom:1
