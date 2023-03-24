@@ -14,6 +14,7 @@ header file though.*/
 #include "a4w23.h"
 #include <cstring>
 #include <fcntl.h>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <pthread.h>
@@ -99,9 +100,35 @@ void tokenizer(char * cmdline, std::string * tokens)  {
 
 void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   // Collects the data from the command line arguments
+  char *                  dynamicBuff;
+  std::fstream            fp(argv[1]);
+  std::string             readline;
+  std::string             tokens[NRES_TYPES + 4];
+
   NITER = atoi(argv[3]);  // Getting NITER
   *monitorTime = atoi(argv[2]);  // Collecting monitor time
 
+  while (std::getline(fp, readline))  {
+    // Getting the line inputs and storing the resources
+    if  (
+      (readline[0] == '#')
+      || (readline[0] == '\n')
+      || (readline.size() == 0)
+    )  {
+      // Ignoring the comments and newlines
+      continue;
+    }
+
+    // Resizing the cstring
+    dynamicBuff = new char[readline.size()];
+    strcpy(dynamicBuff, readline.c_str());
+    tokenizer(dynamicBuff, tokens);
+    // Tokenize and then get the first letter
+    std::cout << tokens[0] << std::endl;
+    
+  }
+
+  delete[] dynamicBuff;
   return;
 }
 
