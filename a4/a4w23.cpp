@@ -142,6 +142,7 @@ void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   }
   std::cout << std::endl;
   delete[] dynamicBuff;
+  fp.close();
   return;
 }
 
@@ -157,6 +158,8 @@ int colon_tokenize(std::string * pair, std::string * name)  {
   delete[] dynamicbuffer;  // I'm a profession, I dynamically allocate memory
   return value;
 }
+
+
 //=============================================================================
 // String parser
 
@@ -178,6 +181,56 @@ void resource_gatherer(std::string * resource_line, int tokenscount)  {
       RESOURCET_COUNT++;
     }
   }
+  return;
+}
+
+void thread_creator(std::string * task_line, int tokenscount)  {
+  int             i;
+  int             requiredr;
+  std::string     rname;
+  
+
+  return;
+}
+
+void thread_creation(char * filename)  {
+  char *                  dynamicBuff;
+  int                     tokenscount;
+  std::fstream            fp(filename);
+  std::string             readline;
+  std::string             tokens[NRES_TYPES + 4];
+
+  while (std::getline(fp, readline))  {
+    // Getting the line inputs and storing the resources
+    if  (
+      (readline[0] == '#')
+      || (readline[0] == '\n')
+      || (readline.size() == 0)
+    )  {
+      // Ignoring the comments and newlines
+      continue;
+    }
+
+    // Resizing the cstring
+    dynamicBuff = new char[readline.size()];
+    strcpy(dynamicBuff, readline.c_str());
+    tokenscount = tokenizer(dynamicBuff, tokens);
+    // Tokenize and then get the first word
+    
+    if  (tokens[0] == "task")  {
+      /* When it's a resource thing */
+      
+    }
+  }
+
+  std::cout << "Resources given:\n\t";
+  for  (auto i : RESOURCE_MAP.resources)  {
+    // Printing out useful resource informations
+    std::cout << i.first << ": " << i.second << " ";
+  }
+  std::cout << std::endl;
+  delete[] dynamicBuff;
+  fp.close();
   return;
 }
 

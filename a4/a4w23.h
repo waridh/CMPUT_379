@@ -13,9 +13,9 @@ The header file for a4w23.cpp.
 
 // Defines
 
-#define MAXWORD         32
-#define NRES_TYPES      10
-#define NTASKS          25
+#define   MAXWORD         32
+#define   NRES_TYPES      10
+#define   NTASKS          25
 
 // Type declaration
 
@@ -62,6 +62,10 @@ int     colon_tokenize(std::string * pair, std::string * name);
 /* This function takes in a colon separated pair in the form of a string
 pointer, and then separate it into the name and number values. The string name
 is passed back via pointer, and the value is returned*/
+
+void    thread_creation(char * filename);
+/* Second readthrough of the file so that we can create the thread separately
+from the resource allocation. Allows for easier synchronization too?*/
 
 
 #endif  /* A4W23_H */
