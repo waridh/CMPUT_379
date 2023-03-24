@@ -47,17 +47,21 @@ typedef struct  {
 
 void    cmdline_err(int argc, char * argv[]);
 /* This function checks for command line errors*/
-void    tokenizer(char * cmdline, std::string * tokens);
+int     tokenizer(char * cmdline, std::string * tokens);
 /* This function tokenizes an input string. Passes by pointer*/
 void    cmdline_eater(int argc, char * argv[]);
 /* This function actually parses the input given in the command line arg*/
-void    resource_gatherer(std::string * resource_line);
+void    resource_gatherer(std::string * resource_line, int tokenscount);
 /* This function reads the input file and allocates the resources into the
 program*/
 void *  monitor_thread(void * arg);
 /* This function is the monitor thread*/
 void *  task_thread(void * arg);
 /* This function is the task thread*/
+int     colon_tokenize(std::string * pair, std::string * name);
+/* This function takes in a colon separated pair in the form of a string
+pointer, and then separate it into the name and number values. The string name
+is passed back via pointer, and the value is returned*/
 
 
 #endif  /* A4W23_H */

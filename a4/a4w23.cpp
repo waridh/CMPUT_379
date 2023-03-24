@@ -31,6 +31,7 @@ header file though.*/
 // Global variables
 
 int                 NITER;
+int                 RESOURCET_COUNT = 0;
 RESOURCES_T         RESOURCE_MAP;
 AVAILR_T            AVAILR_MAP;
 
@@ -84,7 +85,7 @@ void  cmdline_err(int argc, char * argv[])  {
 //=============================================================================
 // Utilities
 
-void tokenizer(char * cmdline, std::string * tokens)  {
+int tokenizer(char * cmdline, std::string * tokens)  {
   /* Goal here is to tokenize the c string input*/
   char							WSPACE[] = "\t ";
   char *						buffer = strtok(cmdline, WSPACE);
@@ -96,11 +97,14 @@ void tokenizer(char * cmdline, std::string * tokens)  {
     count++;
     buffer = strtok(NULL, WSPACE);
   }
+  
+  return count;  // So we know how many tokens there are
 }
 
 void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   // Collects the data from the command line arguments
   char *                  dynamicBuff;
+  int                     tokenscount;
   std::fstream            fp(argv[1]);
   std::string             readline;
   std::string             tokens[NRES_TYPES + 4];
@@ -122,21 +126,59 @@ void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
     // Resizing the cstring
     dynamicBuff = new char[readline.size()];
     strcpy(dynamicBuff, readline.c_str());
-    tokenizer(dynamicBuff, tokens);
-    // Tokenize and then get the first letter
-    std::cout << tokens[0] << std::endl;
+    tokenscount = tokenizer(dynamicBuff, tokens);
+    // Tokenize and then get the first word
     
+    if  (tokens[0] == "resources")  {
+      /* When it's a resource thing */
+      resource_gatherer(tokens, tokenscount);
+    }
   }
 
+  std::cout << "Resources given:\n\t";
+  for  (auto i : RESOURCE_MAP.resources)  {
+    // Printing out useful resource informations
+    std::cout << i.first << ": " << i.second << " ";
+  }
+  std::cout << std::endl;
   delete[] dynamicBuff;
   return;
 }
 
+int colon_tokenize(std::string * pair, std::string * name)  {
+  char *          dynamicbuffer = new char[pair->size()];
+  int             value;
+
+  strcpy(dynamicbuffer, pair->c_str());
+
+  *name = strtok(dynamicbuffer, ":");
+  value = atoi(strtok(NULL, ""));
+
+  delete[] dynamicbuffer;  // I'm a profession, I dynamically allocate memory
+  return value;
+}
 //=============================================================================
 // String parser
 
-void resource_gatherer(std::string * resource_line)  {
+void resource_gatherer(std::string * resource_line, int tokenscount)  {
   /* We want to read the resources from the file*/
+  int             i;
+  int             maxamount;
+  std::string     name;
+  for  (i = 1; i < tokenscount; i++)  {
+    // Need to separate the name and the number based on the column
+    maxamount = colon_tokenize(&(resource_line[i]), &name);
+    // Mass insertion into the map
+
+    if (RESOURCE_MAP.resources.find(name) != RESOURCE_MAP.resources.end())  {
+      // Checking if the key already exists
+      RESOURCE_MAP.resources[name] += maxamount;
+    }  else  {
+      RESOURCE_MAP.resources[name] = maxamount;
+      RESOURCET_COUNT++;
+    }
+  }
+  return;
 }
 
 
@@ -152,7 +194,7 @@ void * monitor_thread(void * arg)  {
   // Implement thread synchronization so that we don't get unexpected thing
 
   while (1)  {
-    std::cout << "montor: " << test << std::endl;
+    std::cout << std::endl << "montor: " << test << std::endl;
     usleep((*monitorTime) * 1000);
     test++;
   }
