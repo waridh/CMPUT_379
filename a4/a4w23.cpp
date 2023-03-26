@@ -224,6 +224,12 @@ void thread_creator(
     }
   }
   // Creating the thread now
+  pthread_create(
+    thread,
+    NULL,
+    task_thread,
+    (void *) inputstruct
+  );
   return;
 }
 
@@ -280,6 +286,7 @@ void thread_creation(
 
   // Debugging output for the threads that have allocated
   if (DEBUG)  {
+    std::cout << std::endl;
     std::cout << "Task threads:\n\t";
     for (i = 0; i < resourceidx; i++)  {
       std::cout << "Name: " << threadr[i].name << ", idx: "
@@ -289,7 +296,11 @@ void thread_creation(
       for (auto j : threadr[i].requiredr)  {
         std::cout << j.first << ": " << j.second << ", ";
       }
-      std::cout << "\n\t";
+      if  (i != resourceidx - 1)  {
+        std::cout << "\n\t";
+      }  else  {
+        std::cout << std::endl;
+      }
     }
   }
   
@@ -299,6 +310,7 @@ void thread_creation(
 }
 
 void  thread_main(char * filename, int tasksamount)  {
+  int                     i;
   THREADREQUIREMENTS *    threadresources;
   pthread_t *             threads;
 
@@ -307,6 +319,14 @@ void  thread_main(char * filename, int tasksamount)  {
 
   thread_creation(filename, threadresources, threads);
 
+  // Join the thread and freeing the resources
+  std::cout << std::endl << "Freeing resources: " << std::endl;
+  for (i = 0; i < tasksamount; i++)  {
+    // Waiting to collect the threads
+    pthread_join(threads[i], NULL);
+    std::cout << "\tCollected thread at index: " << i << std::endl;
+  }
+  // Deleting the dynamically allocated stuff from the heap
   delete[] threadresources;
   delete[] threads;
   return;
