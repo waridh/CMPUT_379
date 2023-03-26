@@ -41,6 +41,7 @@ static AVAILR_T               AVAILR_MAP;
 
 static pthread_barrier_t      bar1;  // Barrier so all threads start at once
 static pthread_barrier_t      bar2;  // Barrier for stopping all the threads
+static pthread_barrier_t      bar3;  // Need this one to let threads start good
 static pthread_mutex_t        mutex1;  // Not sure what for
 static pthread_mutex_t        monitormutex;
 static pthread_mutex_t        outputlock;  // So that the threads can take turn
@@ -401,6 +402,8 @@ void  thread_main(
     barrier_err();
   }  else if (pthread_barrier_init(&bar2, NULL, tasksamount + 1) != 0)  {
     barrier_err();
+  }  else if (pthread_barrier_init(&bar3, NULL, tasksamount) != 0)  {
+    barrier_err();
   }
 
   // Task thread creation function
@@ -458,12 +461,15 @@ void * monitor_thread(void * arg)  {
 
 void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
+  clock_t                 tstart;
   uint                    completed = 0;
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
 
-  // Starting up synchronization
+  // Start up synchronization
   pthread_barrier_wait(&bar1);
 
+  // Starting up allocation
+  tstart = times(NULL);
   pthread_mutex_lock(&outputlock);
   std::cout << std::endl;
   std::cout << "Starting task " << info->name << std::endl;
@@ -471,6 +477,10 @@ void * task_thread(void * arg)  {
 
   while (completed < NITER)  {
     /* The main task thread loop*/
+    pthread_mutex_lock(&outputlock);
+    std::cout << "task: " << info->name << " (tid= " << ", iter=" << completed
+    << ", time= " << time_since_start(&tstart) << " msec)" << std::endl;
+    pthread_mutex_unlock(&outputlock);
     completed++;
   }
 

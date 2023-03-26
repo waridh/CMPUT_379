@@ -7,7 +7,7 @@ all: a4w23
 
 # Testing target
 test:	a4w23
-	./$< a4-cus1.dat 1000 1000
+	./$< a4-cus1.dat 1000 50
 
 # This creates the main executable. It's linking pthreads
 a4w23: a4w23.o
