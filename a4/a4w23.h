@@ -30,7 +30,8 @@ typedef struct  {
 
 typedef struct  {
   /* This is lookup for resources and counter for max amount. We use a regular
-  map so that we can easily print it out for show purposes.*/
+  map so that we can easily print it out for show purposes. It will become
+  readonly after it's initialization*/
   std::map<std::string, int>                resources;
 } RESOURCES_T;
 
@@ -42,6 +43,24 @@ typedef struct  {
   std::unordered_map<std::string, int>      resources;
 } AVAILR_T;
 
+typedef struct  {
+  /* This structure is created to send the required structs into the thread
+  creation process, so each task knows how much resources it needs. We are
+  going to use an array. I want to index the resources and call those here.
+
+  Looking at this structure, we have everything information we could possibly
+  need for the threads
+  
+  Note:
+    The time stuff is specified as millisecs*/
+  uint                                      busyTime; // Time spent by task
+  uint                                      idleTime; // Break time
+  uint                                      idx;
+  uint                                      rtypes;  // The amount of types
+  std::string                               name;
+  std::unordered_map<std::string, int>      requiredr;
+} THREADREQUIREMENTS;
+
 
 // Function declaration
 
@@ -49,7 +68,7 @@ void    cmdline_err(int argc, char * argv[]);
 /* This function checks for command line errors*/
 int     tokenizer(char * cmdline, std::string * tokens);
 /* This function tokenizes an input string. Passes by pointer*/
-void    cmdline_eater(int argc, char * argv[]);
+int     cmdline_eater(int argc, char * argv[]);
 /* This function actually parses the input given in the command line arg*/
 void    resource_gatherer(std::string * resource_line, int tokenscount);
 /* This function reads the input file and allocates the resources into the
@@ -63,9 +82,27 @@ int     colon_tokenize(std::string * pair, std::string * name);
 pointer, and then separate it into the name and number values. The string name
 is passed back via pointer, and the value is returned*/
 
-void    thread_creation(char * filename);
+void    thread_creation(char * filename, THREADREQUIREMENTS * threadr);
 /* Second readthrough of the file so that we can create the thread separately
 from the resource allocation. Allows for easier synchronization too?*/
+
+void    thread_main(char * filename, int tasksamount);
+/* The main function for threading. Creates threads and also waits for them to
+exit to retrieve resources and keep the program synchronized.
+
+  We want to store the information that is eventually passed into the thread
+  in this function.
+  
+  We also want to store the tids here. I am planning to use dynamic allocation
+  for this purpose.*/
+
+void    thread_creator(
+  std::string * task_list,
+  int tokenscount,
+  THREADREQUIREMENTS * inputstruct
+  );
+/* This function will create the task threads from the line present in the
+input. The goal here is to launch the thread using this function*/
 
 
 #endif  /* A4W23_H */

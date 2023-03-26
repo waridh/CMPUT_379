@@ -24,12 +24,9 @@ header file though.*/
 
 // Define
 
-#define MAXWORD         32
-#define NRES_TYPES      10
-#define NTASKS          25
-
 // Global variables
 
+int                 DEBUG = 1;
 int                 NITER;
 int                 RESOURCET_COUNT = 0;
 RESOURCES_T         RESOURCE_MAP;
@@ -101,10 +98,11 @@ int tokenizer(char * cmdline, std::string * tokens)  {
   return count;  // So we know how many tokens there are
 }
 
-void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
+int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   // Collects the data from the command line arguments
   char *                  dynamicBuff;
   int                     tokenscount;
+  int                     taskcount = 0;
   std::fstream            fp(argv[1]);
   std::string             readline;
   std::string             tokens[NRES_TYPES + 4];
@@ -132,6 +130,9 @@ void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
     if  (tokens[0] == "resources")  {
       /* When it's a resource thing */
       resource_gatherer(tokens, tokenscount);
+    }  else if (tokens[0] == "task")  {
+      // We want to count the amount of threads that will be created
+      taskcount++;
     }
   }
 
@@ -141,9 +142,11 @@ void cmdline_eater(int argc, char * argv[], int * monitorTime)  {
     std::cout << i.first << ": " << i.second << " ";
   }
   std::cout << std::endl;
+
+  // Setting up the index of each resource.
   delete[] dynamicBuff;
   fp.close();
-  return;
+  return taskcount;
 }
 
 int colon_tokenize(std::string * pair, std::string * name)  {
@@ -168,6 +171,7 @@ void resource_gatherer(std::string * resource_line, int tokenscount)  {
   int             i;
   int             maxamount;
   std::string     name;
+
   for  (i = 1; i < tokenscount; i++)  {
     // Need to separate the name and the number based on the column
     maxamount = colon_tokenize(&(resource_line[i]), &name);
@@ -184,21 +188,54 @@ void resource_gatherer(std::string * resource_line, int tokenscount)  {
   return;
 }
 
-void thread_creator(std::string * task_line, int tokenscount)  {
+void thread_creator(
+  std::string * task_line,
+  int tokenscount,
+  THREADREQUIREMENTS * inputstruct
+  )  {
   int             i;
   int             requiredr;
   std::string     rname;
-  
 
+  inputstruct->name = task_line[1].c_str();
+  inputstruct->busyTime = stoi(task_line[2]);
+  inputstruct->idleTime = stoi(task_line[3]);
+  inputstruct->rtypes = tokenscount-4;
+  
+  for  (i = 4; i < tokenscount; i++)  {
+    // Collecting the resource requirements in storing it in the struct
+    // TODO: Error handling for when the resource listed wasn't allocated
+    /* TODO: Need to allocate an array of input structs for the threads*/
+    std::cout << task_line[i] << std::endl;
+    requiredr = colon_tokenize(&(task_line[i]), &rname);
+    if (
+      inputstruct->requiredr.find(rname)
+      != inputstruct->requiredr.end())  {
+      // Checking if the key already exists
+      inputstruct->requiredr[rname] += requiredr;
+    }  else  {
+      inputstruct->requiredr[rname] = requiredr;
+    }
+  }
   return;
 }
 
-void thread_creation(char * filename)  {
+void thread_creation(char * filename, THREADREQUIREMENTS * threadr)  {
   char *                  dynamicBuff;
+  uint                    resourceidx = 0;
+  int                     i;
   int                     tokenscount;
   std::fstream            fp(filename);
   std::string             readline;
   std::string             tokens[NRES_TYPES + 4];
+
+  // Printing out informatino about how much resources we have
+  std::cout << "Resources given:\n\t";
+  for  (auto i : RESOURCE_MAP.resources)  {
+    // Printing out useful resource informations
+    std::cout << i.first << ": " << i.second << " ";
+  }
+  std::cout << std::endl;
 
   while (std::getline(fp, readline))  {
     // Getting the line inputs and storing the resources
@@ -219,22 +256,41 @@ void thread_creation(char * filename)  {
     
     if  (tokens[0] == "task")  {
       /* When it's a resource thing */
-      
+      thread_creator(tokens, tokenscount, threadr + resourceidx);
+      (threadr + resourceidx)->idx = resourceidx;
+      resourceidx++;  // So that we can allocate the data required by the thread
     }
   }
 
-  std::cout << "Resources given:\n\t";
-  for  (auto i : RESOURCE_MAP.resources)  {
-    // Printing out useful resource informations
-    std::cout << i.first << ": " << i.second << " ";
+  // Debugging output for the threads that have allocated
+  if (DEBUG)  {
+    std::cout << "Task threads:\n\t";
+    for (i = 0; i < resourceidx; i++)  {
+      std::cout << "Name: " << threadr[i].name << ", idx: "
+      << threadr[i].idx << ", busyTime: " << threadr[i].busyTime
+      << ", idleTime: " << threadr[i].idleTime << ", ResourcesTypes: "
+      << threadr[i].rtypes << ", ";
+      for (auto j : threadr[i].requiredr)  {
+        std::cout << j.first << ": " << j.second << ", ";
+      }
+      std::cout << "\n\t";
+    }
   }
-  std::cout << std::endl;
+  
   delete[] dynamicBuff;
   fp.close();
   return;
 }
 
+void  thread_main(char * filename, int tasksamount)  {
+  THREADREQUIREMENTS *    threadresources;
 
+  threadresources = new THREADREQUIREMENTS[tasksamount];  // Dynamic allocation
+  thread_creation(filename, threadresources);
+
+  delete[] threadresources;
+  return;
+}
 
 //=============================================================================
 // Thread functions
@@ -264,10 +320,12 @@ void * task_thread(void * arg)  {
 int  main(int argc, char * argv[])  {
   // Running the main function
   int         monitorTime;
+  int         taskcount;
   pthread_t   montid;
   
   cmdline_err(argc, argv);
-  cmdline_eater(argc, argv, &monitorTime);  // Process some command line args
+  taskcount = cmdline_eater(argc, argv, &monitorTime);  /* Process some command
+  line args */
   
   // Making the monitor thread
   pthread_create(
@@ -277,6 +335,8 @@ int  main(int argc, char * argv[])  {
     (void *) &monitorTime
   );
   pthread_detach(montid);
+
+  thread_main(argv[1], taskcount);
   sleep(5);
   return 0;
 }
