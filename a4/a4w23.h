@@ -82,7 +82,11 @@ int     colon_tokenize(std::string * pair, std::string * name);
 pointer, and then separate it into the name and number values. The string name
 is passed back via pointer, and the value is returned*/
 
-void    thread_creation(char * filename, THREADREQUIREMENTS * threadr);
+void    thread_creation(
+  char * filename,
+  THREADREQUIREMENTS * threadr,
+  pthread_t * threads
+  );
 /* Second readthrough of the file so that we can create the thread separately
 from the resource allocation. Allows for easier synchronization too?*/
 
@@ -97,9 +101,11 @@ exit to retrieve resources and keep the program synchronized.
   for this purpose.*/
 
 void    thread_creator(
-  std::string * task_list,
-  int tokenscount,
-  THREADREQUIREMENTS * inputstruct
+  std::string *           task_list,
+  int                     idx,
+  int                     tokenscount,
+  THREADREQUIREMENTS *    inputstruct,
+  pthread_t *             thread
   );
 /* This function will create the task threads from the line present in the
 input. The goal here is to launch the thread using this function*/

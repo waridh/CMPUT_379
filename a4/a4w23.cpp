@@ -189,19 +189,23 @@ void resource_gatherer(std::string * resource_line, int tokenscount)  {
 }
 
 void thread_creator(
-  std::string * task_line,
-  int tokenscount,
-  THREADREQUIREMENTS * inputstruct
+  std::string *           task_line,
+  int                     idx,
+  int                     tokenscount,
+  THREADREQUIREMENTS *    inputstruct,
+  pthread_t *             thread
   )  {
   int             i;
   int             requiredr;
   std::string     rname;
 
+  // Allocating the required information into the struct being passed into tid
   inputstruct->name = task_line[1].c_str();
   inputstruct->busyTime = stoi(task_line[2]);
   inputstruct->idleTime = stoi(task_line[3]);
   inputstruct->rtypes = tokenscount-4;
-  
+  inputstruct->idx = idx;
+   
   for  (i = 4; i < tokenscount; i++)  {
     // Collecting the resource requirements in storing it in the struct
     // TODO: Error handling for when the resource listed wasn't allocated
@@ -211,16 +215,23 @@ void thread_creator(
     if (
       inputstruct->requiredr.find(rname)
       != inputstruct->requiredr.end())  {
+      /* Handling for when the input file is weird and shows the same resource
+      multiple times*/
       // Checking if the key already exists
       inputstruct->requiredr[rname] += requiredr;
     }  else  {
       inputstruct->requiredr[rname] = requiredr;
     }
   }
+  // Creating the thread now
   return;
 }
 
-void thread_creation(char * filename, THREADREQUIREMENTS * threadr)  {
+void thread_creation(
+  char *                  filename,
+  THREADREQUIREMENTS *    threadr,
+  pthread_t *             threads
+  )  {
   char *                  dynamicBuff;
   uint                    resourceidx = 0;
   int                     i;
@@ -256,8 +267,13 @@ void thread_creation(char * filename, THREADREQUIREMENTS * threadr)  {
     
     if  (tokens[0] == "task")  {
       /* When it's a resource thing */
-      thread_creator(tokens, tokenscount, threadr + resourceidx);
-      (threadr + resourceidx)->idx = resourceidx;
+      
+      thread_creator(
+        tokens,
+        resourceidx,
+        tokenscount,
+        threadr + resourceidx,
+        threads + resourceidx);
       resourceidx++;  // So that we can allocate the data required by the thread
     }
   }
@@ -284,11 +300,15 @@ void thread_creation(char * filename, THREADREQUIREMENTS * threadr)  {
 
 void  thread_main(char * filename, int tasksamount)  {
   THREADREQUIREMENTS *    threadresources;
+  pthread_t *             threads;
 
   threadresources = new THREADREQUIREMENTS[tasksamount];  // Dynamic allocation
-  thread_creation(filename, threadresources);
+  threads = new pthread_t[tasksamount];  // Dynamically allocating the threads
+
+  thread_creation(filename, threadresources, threads);
 
   delete[] threadresources;
+  delete[] threads;
   return;
 }
 
