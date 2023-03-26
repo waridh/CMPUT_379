@@ -64,19 +64,43 @@ typedef struct  {
 
 // Function declaration
 
+// Errors
+
 void    cmdline_err(int argc, char * argv[]);
 /* This function checks for command line errors*/
+
+void    barrier_err();
+/* For when we cannot initialize the barrier obj*/
+
+// Utilities
+
+void    timeprint(
+  clock_t &time1,
+  clock_t &time2,
+  struct tms &cpu1,
+  struct tms &cpu2
+  );
+/* This function creates output on how much cpu time was used*/
+
+double  time_since_start(clock_t * startTime);
+/* This function is created to return the time in milliseconds since the start*/
+
 int     tokenizer(char * cmdline, std::string * tokens);
 /* This function tokenizes an input string. Passes by pointer*/
+
 int     cmdline_eater(int argc, char * argv[]);
 /* This function actually parses the input given in the command line arg*/
+
 void    resource_gatherer(std::string * resource_line, int tokenscount);
 /* This function reads the input file and allocates the resources into the
 program*/
+
 void *  monitor_thread(void * arg);
 /* This function is the monitor thread*/
+
 void *  task_thread(void * arg);
 /* This function is the task thread*/
+
 int     colon_tokenize(std::string * pair, std::string * name);
 /* This function takes in a colon separated pair in the form of a string
 pointer, and then separate it into the name and number values. The string name
@@ -90,7 +114,11 @@ void    thread_creation(
 /* Second readthrough of the file so that we can create the thread separately
 from the resource allocation. Allows for easier synchronization too?*/
 
-void    thread_main(char * filename, int tasksamount);
+void    thread_main(
+  char * filename,
+  int tasksamount,
+  pthread_t * monitorthread
+  );
 /* The main function for threading. Creates threads and also waits for them to
 exit to retrieve resources and keep the program synchronized.
 
@@ -110,6 +138,8 @@ void    thread_creator(
 /* This function will create the task threads from the line present in the
 input. The goal here is to launch the thread using this function*/
 
+void monitor_signal(int signum);
+/* Sending a signal that will just terminal the monitor thread. Good for sync*/
 
 #endif  /* A4W23_H */
 
