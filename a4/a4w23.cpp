@@ -15,12 +15,15 @@ header file though.*/
 #include <cstring>
 #include <fcntl.h>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <pthread.h>
 #include <signal.h>
 #include <string>
 #include <sys/times.h>
+#include <sys/types.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <unordered_map>
 
@@ -42,14 +45,15 @@ static AVAILR_T               AVAILR_MAP;
 static pthread_barrier_t      bar1;  // Barrier so all threads start at once
 static pthread_barrier_t      bar2;  // Barrier for stopping all the threads
 static pthread_barrier_t      bar3;  // Need this one to let threads start good
-static pthread_mutex_t        mutex1;  // Not sure what for
-static pthread_mutex_t        monitormutex;
+static pthread_mutex_t        monitormutex;  // Mutex for the monitor thread
 static pthread_mutex_t        outputlock;  // So that the threads can take turn
 static pthread_mutex_t        clock_setter;  // A critical section access
 
+static pthread_mutex_t        monitoraccess;  // Getting running details
+
 // Critical sections
 
-
+static MONITOR_T              taskmanager;  // Details on what is running
 
 //=============================================================================
 // Error handling
@@ -440,10 +444,15 @@ void  thread_main(
 void * monitor_thread(void * arg)  {
   // Creates the output every monitorTime millisecs
   int *         monitorTime = (int *) arg;
-  int           test = 0;
 
   // Setting up signal handler for when the main thread wants to kill this one
   signal(SIGALRM, monitor_signal);
+
+  pthread_mutex_lock(&monitoraccess);
+  taskmanager.idlecount = 0;
+  taskmanager.runcount = 0;
+  taskmanager.waitcount = 0;
+  pthread_mutex_unlock(&monitoraccess);
 
   // Sync for the exit of the program
   pthread_mutex_lock(&monitormutex);
@@ -453,11 +462,37 @@ void * monitor_thread(void * arg)  {
   // Implement thread synchronization so that we don't get unexpected thing
 
   while (1)  {
+
+    // Critical section safety rails
     pthread_mutex_lock(&outputlock);
-    std::cout << std::endl << "montor: " << test << std::endl;
+    pthread_mutex_lock(&monitoraccess);
+
+    // Printing out the waiting threads
+    std::cout << std::endl << "montor:\t[WAIT]\t";
+    for  (auto i : taskmanager.wait)  {
+      std::cout << i << ' ';
+    }
+    std::cout << std::endl;
+
+    // Printing out the running threads
+    std::cout << "\t[RUN]\t";
+    for  (auto i : taskmanager.run)  {
+      std::cout << i << ' ';
+    }
+    std::cout << std::endl;
+
+    // Printing out the idle threads
+    std::cout << "\t[IDLE]\t";
+    for  (auto i : taskmanager.idle)  {
+      std::cout << i << ' ';
+    }
+    std::cout << std::endl;
+
+    std::cout << std::endl;
+
+    pthread_mutex_unlock(&monitoraccess);
     pthread_mutex_unlock(&outputlock);
     usleep((*monitorTime) * 1000);
-    test++;
   }
   return NULL;
 }
@@ -467,6 +502,7 @@ void * task_thread(void * arg)  {
   clock_t                 tstart;
   int                     ran = 1;
   uint                    completed = 0;
+  pthread_t               tid = pthread_self();
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
 
   // Start up synchronization
@@ -483,15 +519,43 @@ void * task_thread(void * arg)  {
 
   while (completed < NITER)  {
     /* The main task thread loop*/
-
+    // Put the thread into waiting
+    pthread_mutex_lock(&monitoraccess);
+    taskmanager.wait.insert(info-> name);
+    taskmanager.waitcount++;
+    pthread_mutex_unlock(&monitoraccess);
     if (ran)  {
-      pthread_mutex_lock(&outputlock);
-      std::cout << std::endl;
-      std::cout << "task: " << info->name << " (tid= " << ", iter=" << completed
-      << ", time= " << time_since_start(&tstart) << " msec)" << std::endl;
-      pthread_mutex_unlock(&outputlock);
+      // Taking the busy time to run. We have gotten all the resource we needed
+      pthread_mutex_lock(&monitoraccess);
+      taskmanager.wait.erase(info->name);
+      taskmanager.waitcount--;
+      taskmanager.run.insert(info->name);
+      taskmanager.runcount++;
+      pthread_mutex_unlock(&monitoraccess);
       usleep((info->busyTime) * 1000);
+
+      // Sending command line output
+      pthread_mutex_lock(&outputlock);
+      std::cout << "task: " << info->name << " (tid= 0x" << std::hex << tid;
+      std::cout.copyfmt(std::ios(NULL));
+      std::cout << ", iter=" << completed << ", time= "
+      << time_since_start(&tstart) << " msec)" << std::endl;
+      pthread_mutex_unlock(&outputlock);
+      
+      // Putting the thread into idle
+      pthread_mutex_lock(&monitoraccess);
+      taskmanager.run.erase(info->name);
+      taskmanager.runcount--;
+      taskmanager.idle.insert(info->name);
+      taskmanager.idlecount++;
+      pthread_mutex_unlock(&monitoraccess);
       usleep((info->idleTime) * 1000);  // When the thread is idling
+
+      // Done idling
+      pthread_mutex_lock(&monitoraccess);
+      taskmanager.idle.erase(info->name);
+      taskmanager.idlecount--;
+      pthread_mutex_unlock(&monitoraccess);
       completed++;
     }
   }

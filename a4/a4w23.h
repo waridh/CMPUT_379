@@ -8,6 +8,7 @@ The header file for a4w23.cpp.
 
 // Included libraries
 #include  <map>
+#include  <set>
 #include  <string>
 #include  <unordered_map>
 
@@ -20,9 +21,9 @@ The header file for a4w23.cpp.
 // Type declaration
 
 typedef struct  {
-  char                  wait[NTASKS][MAXWORD];
-  char                  run[NTASKS][MAXWORD];
-  char                  idle[NTASKS][MAXWORD];
+  std::set<std::string>   wait;
+  std::set<std::string>   run;
+  std::set<std::string>   idle;
   int                   waitcount;
   int                   runcount;
   int                   idlecount;
@@ -40,7 +41,9 @@ typedef struct  {
   from the above struct because the number will changed based on how many are
   available.*/
 
-  std::unordered_map<std::string, int>      resources;
+  std::unordered_map<std::string, int>                resources;
+
+  std::unordered_map<std::string, pthread_mutex_t>    emptylock;
 } AVAILR_T;
 
 typedef struct  {
@@ -58,7 +61,7 @@ typedef struct  {
   uint                                      idx;
   uint                                      rtypes;  // The amount of types
   std::string                               name;
-  std::unordered_map<std::string, int>      requiredr;
+  std::map<std::string, int>                requiredr;  // Using map cause order
 } THREADREQUIREMENTS;
 
 
