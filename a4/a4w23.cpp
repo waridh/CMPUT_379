@@ -38,7 +38,6 @@ static uint                   NITER;
 static int                    RESOURCET_COUNT = 0;
 static long                   clktck = 0;  // For conversion into seconds
 static RESOURCES_T            RESOURCE_MAP;
-static AVAILR_T               AVAILR_MAP;
 
 // Synchronization
 
@@ -48,12 +47,13 @@ static pthread_barrier_t      bar3;  // Need this one to let threads start good
 static pthread_mutex_t        monitormutex;  // Mutex for the monitor thread
 static pthread_mutex_t        outputlock;  // So that the threads can take turn
 static pthread_mutex_t        clock_setter;  // A critical section access
-
+static pthread_mutex_t        resourceaccess;  // For checking the thing
 static pthread_mutex_t        monitoraccess;  // Getting running details
 
 // Critical sections
 
 static MONITOR_T              taskmanager;  // Details on what is running
+static AVAILR_T               AVAILR_MAP;
 
 //=============================================================================
 // Error handling
@@ -175,7 +175,11 @@ int tokenizer(char * cmdline, std::string * tokens)  {
 
 int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   // Collects the data from the command line arguments
+  // Statically allocating some stuff because it's on the stack and has low mem
+  /* Funny error: For some reason the dynamically allocated code is breaking.
+  I don't know why, we we are making a kinda big buffer on the stack for this.*/
   char *                  dynamicBuff;
+  char                    staticBuff[1024];
   int                     tokenscount;
   int                     taskcount = 0;
   std::fstream            fp(argv[1]);
@@ -196,12 +200,9 @@ int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
       continue;
     }
 
-    // Resizing the cstring
-    dynamicBuff = new char[readline.size()];
-    strcpy(dynamicBuff, readline.c_str());
-    tokenscount = tokenizer(dynamicBuff, tokens);
+    strcpy(staticBuff, readline.c_str());
+    tokenscount = tokenizer(staticBuff, tokens);
     // Tokenize and then get the first word
-    
     if  (tokens[0] == "resources")  {
       /* When it's a resource thing */
       resource_gatherer(tokens, tokenscount);
@@ -215,10 +216,10 @@ int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   for  (auto i : RESOURCE_MAP.resources)  {
     // Printing out useful resource informations
     std::cout << '\t' << i.first << ": " << i.second << std::endl;
+    AVAILR_MAP.resources[i.first] = i.second;
   }
 
-  // Setting up the index of each resource.
-  delete[] dynamicBuff;
+  
   fp.close();
   return taskcount;
 }
@@ -324,13 +325,16 @@ void thread_creation(
   THREADREQUIREMENTS *    threadr,
   pthread_t *             threads
   )  {
-  char *                  dynamicBuff;
+
+  /* We were using dynamic buffer at one point, but turns out, it wanted to
+  die. I am guessing that we will never get to 1024 char size per line*/
+  char                    staticBuff[1024];
   uint                    resourceidx = 0;
   uint                    i;
   int                     tokenscount;
   std::fstream            fp(filename);
   std::string             readline;
-  std::string             tokens[NRES_TYPES + 4]; 
+  std::string             tokens[NRES_TYPES + 4];
 
   while (std::getline(fp, readline))  {
     // Getting the line inputs and storing the resources
@@ -343,10 +347,9 @@ void thread_creation(
       continue;
     }
 
-    // Resizing the cstring
-    dynamicBuff = new char[readline.size()];
-    strcpy(dynamicBuff, readline.c_str());
-    tokenscount = tokenizer(dynamicBuff, tokens);
+    strcpy(staticBuff, readline.c_str());
+  
+    tokenscount = tokenizer(staticBuff, tokens);
     // Tokenize and then get the first word
     
     if  (tokens[0] == "task")  {
@@ -361,7 +364,7 @@ void thread_creation(
       resourceidx++;  // So that we can allocate the data required by the thread
     }
   }
-
+  
   // Debugging output for the threads that have allocated
   if (DEBUG)  {
     pthread_mutex_lock(&outputlock);
@@ -385,7 +388,6 @@ void thread_creation(
     pthread_mutex_unlock(&outputlock);
   }
   
-  delete[] dynamicBuff;
   fp.close();
   return;
 }
@@ -396,13 +398,11 @@ void  thread_main(
   pthread_t * monitorthread
   )  {
   int                     i;
-  THREADREQUIREMENTS *    threadresources;
-  pthread_t *             threads;
+  THREADREQUIREMENTS      threadresources[NTASKS];
+  pthread_t               threads[NTASKS];
 
   // Allocation of memory
-  threadresources = new THREADREQUIREMENTS[tasksamount];  // Dynamic allocation
-  threads = new pthread_t[tasksamount];  // Dynamically allocating the threads
-
+  
   // Synchronication initialization
   if (pthread_barrier_init(&bar1, NULL, tasksamount + 1) != 0)  {
     // Error handling
@@ -415,7 +415,6 @@ void  thread_main(
 
   // Task thread creation function
   thread_creation(filename, threadresources, threads);
-
   // Synchronization of exit
   pthread_barrier_wait(&bar2);
   pthread_kill(*monitorthread, SIGALRM);
@@ -429,8 +428,7 @@ void  thread_main(
   }
   pthread_mutex_unlock(&monitormutex);
   // Deleting the dynamically allocated stuff from the heap
-  delete[] threadresources;
-  delete[] threads;
+ 
 
   // Other destruction methods
   pthread_barrier_destroy(&bar1);
@@ -516,6 +514,11 @@ void * task_thread(void * arg)  {
   std::cout << "Starting task " << info->name << std::endl;
   pthread_mutex_unlock(&outputlock);
 
+  pthread_mutex_lock(&monitoraccess);
+  taskmanager.idle.insert(info->name);
+  taskmanager.idlecount++;
+  pthread_mutex_unlock(&monitoraccess);
+
   pthread_barrier_wait(&bar1);
 
   while (completed < NITER)  {
@@ -523,6 +526,8 @@ void * task_thread(void * arg)  {
 
     // Put the thread into waiting
     pthread_mutex_lock(&monitoraccess);
+    taskmanager.idle.erase(info->name);
+    taskmanager.idlecount--;
     taskmanager.wait.insert(info-> name);
     taskmanager.waitcount++; 
     pthread_mutex_unlock(&monitoraccess);
@@ -532,6 +537,14 @@ void * task_thread(void * arg)  {
       // Iterating through ordered map. Since ordered, it will not cycle
       for  (j = 0; j < i.second; j++)  {
         // Truly checking resources one by one. Should prevent deadlock this way
+        pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
+        pthread_mutex_lock(&resourceaccess);  // Needed for resource return
+
+        pthread_mutex_unlock(&resourceaccess);
+        if  (AVAILR_MAP.resources[i.first] != 0)  {
+          pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
+        }
+        
       }
     }
     if (ran)  {
@@ -552,6 +565,21 @@ void * task_thread(void * arg)  {
       << time_since_start(&tstart) << " msec)" << std::endl;
       pthread_mutex_unlock(&outputlock);
       
+      // Releasing resources
+      // Going through loop to access the resources
+      for  (auto i : info->requiredr)  {
+        // Iterating through ordered map. Since ordered, it will not cycle
+        for  (j = 0; j < i.second; j++)  {
+          // Truly checking resources one by one. Should prevent deadlock this way
+          pthread_mutex_lock(&resourceaccess);
+          if  ()  {
+            // For when we are returning resource to an empty struct
+          }
+          pthread_mutex_unlock(&resourceaccess);
+          
+        }
+      }
+
       // Putting the thread into idle
       pthread_mutex_lock(&monitoraccess);
       taskmanager.run.erase(info->name);
@@ -561,11 +589,6 @@ void * task_thread(void * arg)  {
       pthread_mutex_unlock(&monitoraccess);
       usleep((info->idleTime) * 1000);  // When the thread is idling
 
-      // Done idling
-      pthread_mutex_lock(&monitoraccess);
-      taskmanager.idle.erase(info->name);
-      taskmanager.idlecount--;
-      pthread_mutex_unlock(&monitoraccess);
       completed++;
     }
   }
