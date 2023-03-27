@@ -360,6 +360,7 @@ void thread_creation(
 
   // Debugging output for the threads that have allocated
   if (DEBUG)  {
+    pthread_mutex_lock(&outputlock);
     std::cout << std::endl;
     std::cout << "Task threads:\n\t";
     for (i = 0; i < resourceidx; i++)  {
@@ -376,6 +377,8 @@ void thread_creation(
         std::cout << std::endl;
       }
     }
+    std::cout << std::endl;
+    pthread_mutex_unlock(&outputlock);
   }
   
   delete[] dynamicBuff;
@@ -462,26 +465,35 @@ void * monitor_thread(void * arg)  {
 void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
   clock_t                 tstart;
+  int                     ran = 1;
   uint                    completed = 0;
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
 
   // Start up synchronization
-  pthread_barrier_wait(&bar1);
+  pthread_barrier_wait(&bar3);
 
   // Starting up allocation
   tstart = times(NULL);
   pthread_mutex_lock(&outputlock);
-  std::cout << std::endl;
+  
   std::cout << "Starting task " << info->name << std::endl;
   pthread_mutex_unlock(&outputlock);
 
+  pthread_barrier_wait(&bar1);
+
   while (completed < NITER)  {
     /* The main task thread loop*/
-    pthread_mutex_lock(&outputlock);
-    std::cout << "task: " << info->name << " (tid= " << ", iter=" << completed
-    << ", time= " << time_since_start(&tstart) << " msec)" << std::endl;
-    pthread_mutex_unlock(&outputlock);
-    completed++;
+
+    if (ran)  {
+      pthread_mutex_lock(&outputlock);
+      std::cout << std::endl;
+      std::cout << "task: " << info->name << " (tid= " << ", iter=" << completed
+      << ", time= " << time_since_start(&tstart) << " msec)" << std::endl;
+      pthread_mutex_unlock(&outputlock);
+      usleep((info->busyTime) * 1000);
+      usleep((info->idleTime) * 1000);  // When the thread is idling
+      completed++;
+    }
   }
 
   // Synchronization of thread exit
