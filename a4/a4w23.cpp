@@ -501,6 +501,7 @@ void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
   clock_t                 tstart;
   int                     ran = 1;
+  uint                    j;
   uint                    completed = 0;
   pthread_t               tid = pthread_self();
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
@@ -519,11 +520,20 @@ void * task_thread(void * arg)  {
 
   while (completed < NITER)  {
     /* The main task thread loop*/
+
     // Put the thread into waiting
     pthread_mutex_lock(&monitoraccess);
     taskmanager.wait.insert(info-> name);
-    taskmanager.waitcount++;
+    taskmanager.waitcount++; 
     pthread_mutex_unlock(&monitoraccess);
+
+    // Going through loop to access the resources
+    for  (auto i : info->requiredr)  {
+      // Iterating through ordered map. Since ordered, it will not cycle
+      for  (j = 0; j < i.second; j++)  {
+        // Truly checking resources one by one. Should prevent deadlock this way
+      }
+    }
     if (ran)  {
       // Taking the busy time to run. We have gotten all the resource we needed
       pthread_mutex_lock(&monitoraccess);
