@@ -591,23 +591,29 @@ void * task_thread(void * arg)  {
       /* TODO: Grab the resource in chunks, not one at a time*/
       pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
       pthread_mutex_lock(&resourceaccess);
-      pthread_mutex_unlock(&resourceaccess);
-      if  (AVAILR_MAP.resources[i.first] != 0)  {
-        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
-      }
-      for  (j = 0; j < i.second; j++)  {
-        // Truly checking resources one by one. Should prevent deadlock this way
-        pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
-        pthread_mutex_lock(&resourceaccess);  // Needed for resource return
-        // Taking the resource
-        AVAILR_MAP.resources[i.first]--;
-
+      if  (AVAILR_MAP.resources[i.first] >= i.second)  {
+        AVAILR_MAP.resources[i.first] =- i.second;
         pthread_mutex_unlock(&resourceaccess);
         if  (AVAILR_MAP.resources[i.first] != 0)  {
           pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
         }
-        
+      }  else  {
+        // Waiting
       }
+      
+      // for  (j = 0; j < i.second; j++)  {
+      //   // Truly checking resources one by one. Should prevent deadlock this way
+      //   pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
+      //   pthread_mutex_lock(&resourceaccess);  // Needed for resource return
+      //   // Taking the resource
+      //   AVAILR_MAP.resources[i.first]--;
+
+      //   pthread_mutex_unlock(&resourceaccess);
+      //   if  (AVAILR_MAP.resources[i.first] != 0)  {
+      //     pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
+      //   }
+        
+      // }
     }
     if (ran)  {
       // Taking the busy time to run. We have gotten all the resource we needed
