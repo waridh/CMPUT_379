@@ -539,6 +539,8 @@ void * task_thread(void * arg)  {
         // Truly checking resources one by one. Should prevent deadlock this way
         pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
         pthread_mutex_lock(&resourceaccess);  // Needed for resource return
+        // Taking the resource
+        AVAILR_MAP.resources[i.first]--;
 
         pthread_mutex_unlock(&resourceaccess);
         if  (AVAILR_MAP.resources[i.first] != 0)  {
@@ -572,8 +574,12 @@ void * task_thread(void * arg)  {
         for  (j = 0; j < i.second; j++)  {
           // Truly checking resources one by one. Should prevent deadlock this way
           pthread_mutex_lock(&resourceaccess);
-          if  ()  {
+          if  (AVAILR_MAP.resources[i.first] == 0)  {
             // For when we are returning resource to an empty struct
+            AVAILR_MAP.resources[i.first]++;
+            pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
+          }  else  {
+            AVAILR_MAP.resources[i.first]++;
           }
           pthread_mutex_unlock(&resourceaccess);
           
