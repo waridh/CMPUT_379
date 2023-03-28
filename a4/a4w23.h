@@ -24,9 +24,11 @@ typedef struct  {
   std::set<std::string>   wait;
   std::set<std::string>   run;
   std::set<std::string>   idle;
-  int                   waitcount;
-  int                   runcount;
-  int                   idlecount;
+  std::set<std::string>   done;
+  uint                    waitcount;
+  uint                    runcount;
+  uint                    idlecount;
+  uint                    donecount;
 }  MONITOR_T;
 
 typedef struct  {

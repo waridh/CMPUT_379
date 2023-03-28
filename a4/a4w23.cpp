@@ -43,6 +43,7 @@ static RESOURCES_T            RESOURCE_MAP;
 static pthread_barrier_t      bar1;  // Barrier so all threads start at once
 static pthread_barrier_t      bar2;  // Barrier for stopping all the threads
 static pthread_barrier_t      bar3;  // Need this one to let threads start good
+static pthread_barrier_t      bar4;  // For the final closing thread output
 static pthread_mutex_t        monitormutex;  // Mutex for the monitor thread
 static pthread_mutex_t        outputlock;  // So that the threads can take turn
 static pthread_mutex_t        clock_setter;  // A critical section access
@@ -177,7 +178,7 @@ int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   // Statically allocating some stuff because it's on the stack and has low mem
   /* Funny error: For some reason the dynamically allocated code is breaking.
   I don't know why, we we are making a kinda big buffer on the stack for this.*/
-  char                    staticBuff[1024];
+  char *                  staticBuff;
   int                     tokenscount;
   int                     taskcount = 0;
   std::fstream            fp(argv[1]);
@@ -198,6 +199,8 @@ int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
       continue;
     }
 
+    // Dynamically allocating memory;
+    staticBuff = new char[readline.size()];
     strcpy(staticBuff, readline.c_str());
     tokenscount = tokenizer(staticBuff, tokens);
     // Tokenize and then get the first word
@@ -217,7 +220,7 @@ int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
     AVAILR_MAP.resources[i.first] = i.second;
   }
 
-  
+  delete[] staticBuff;
   fp.close();
   return taskcount;
 }
@@ -294,7 +297,6 @@ void thread_creator(
   for  (i = 4; i < tokenscount; i++)  {
     // Collecting the resource requirements in storing it in the struct
     // TODO: Error handling for when the resource listed wasn't allocated
-    /* TODO: Need to allocate an array of input structs for the threads*/
     
     requiredr = colon_tokenize(&(task_line[i]), &rname);
     if (
@@ -308,13 +310,17 @@ void thread_creator(
       inputstruct->requiredr[rname] = requiredr;
     }
   }
+
   // Creating the thread now
-  pthread_create(
+  if  (pthread_create(
     thread,
     NULL,
     task_thread,
     (void *) inputstruct
-  );
+  ) != 0)  {
+    std::cout << "Failed to create thread: " << inputstruct->name << std::endl;
+    exit(EXIT_FAILURE);  // Error handling
+  };
   return;
 }
 
@@ -326,7 +332,7 @@ void thread_creation(
 
   /* We were using dynamic buffer at one point, but turns out, it wanted to
   die. I am guessing that we will never get to 1024 char size per line*/
-  char                    staticBuff[1024];
+  char *                  staticBuff;  // Misnomer, it's actually dynamic
   uint                    resourceidx = 0;
   uint                    i;
   int                     tokenscount;
@@ -344,7 +350,7 @@ void thread_creation(
       // Ignoring the comments and newlines
       continue;
     }
-
+    staticBuff = new char[readline.size()];
     strcpy(staticBuff, readline.c_str());
   
     tokenscount = tokenizer(staticBuff, tokens);
@@ -389,7 +395,9 @@ void thread_creation(
   std::cout << std::endl;
   std::cout << "Running threads:" << std::endl;
   pthread_mutex_unlock(&outputlock);
-  fp.close();
+
+  delete[] staticBuff;  // Releasing memory
+  fp.close();  // Closing input stream
   return;
 }
 
@@ -398,42 +406,51 @@ void  thread_main(
   int tasksamount,
   pthread_t * monitorthread
   )  {
-  int                     i;
-  THREADREQUIREMENTS      threadresources[NTASKS];
-  pthread_t               threads[NTASKS];
+  int                       i;
+  THREADREQUIREMENTS *      threadresources;
+  pthread_t *               threads;
 
   // Allocation of memory
-  
+  threadresources = new THREADREQUIREMENTS[tasksamount];
+  threads = new pthread_t[tasksamount];
+
   // Synchronication initialization
   if (pthread_barrier_init(&bar1, NULL, tasksamount + 1) != 0)  {
-    // Error handling
-    barrier_err();
+    barrier_err();  // Error handling
   }  else if (pthread_barrier_init(&bar2, NULL, tasksamount + 1) != 0)  {
+    barrier_err();  // Error handling
+  }  else if (pthread_barrier_init(&bar3, NULL, tasksamount + 1) != 0)  {
     barrier_err();
-  }  else if (pthread_barrier_init(&bar3, NULL, tasksamount) != 0)  {
-    barrier_err();
+  }  else if (pthread_barrier_init(&bar4, NULL, tasksamount + 1))  {
+    barrier_err();  // Error handling
   }
 
   // Task thread creation function
   thread_creation(filename, threadresources, threads);
-  // Synchronization of exit
-  pthread_barrier_wait(&bar2);
-  pthread_kill(*monitorthread, SIGALRM);
+
+  pthread_barrier_wait(&bar3);  // Synchonizing the start
+
+  pthread_barrier_wait(&bar2);  // Synchronizing the exit
+  pthread_kill(*monitorthread, SIGALRM);  // Ending the monitor thread
   pthread_mutex_lock(&monitormutex);  // monitor sync
   // Join the thread and freeing the resources
   std::cout << std::endl << "Freeing resources: " << std::endl;
-  for (i = 0; i < tasksamount; i++)  {
-    // Waiting to collect the threads
+  pthread_barrier_wait(&bar4);
+  for  (i = 0; i < tasksamount; i++)  {
+    // Joining the thread
     pthread_join(threads[i], NULL);
-    std::cout << "\tCollected thread at index: " << i << std::endl;
   }
   pthread_mutex_unlock(&monitormutex);
+
   // Deleting the dynamically allocated stuff from the heap
- 
+  delete[] threadresources;
+  delete[] threads;
 
   // Other destruction methods
   pthread_barrier_destroy(&bar1);
   pthread_barrier_destroy(&bar2);
+  pthread_barrier_destroy(&bar3);
+  pthread_barrier_destroy(&bar4);
   return;
 }
 
@@ -451,6 +468,7 @@ void * monitor_thread(void * arg)  {
   taskmanager.idlecount = 0;
   taskmanager.runcount = 0;
   taskmanager.waitcount = 0;
+  taskmanager.donecount = 0;
   pthread_mutex_unlock(&monitoraccess);
 
   // Sync for the exit of the program
@@ -487,6 +505,12 @@ void * monitor_thread(void * arg)  {
     }
     std::cout << std::endl;
 
+    std::cout << "\t[DONE]\t";
+    for  (auto i : taskmanager.done)  {
+      std::cout << i << ' ';
+    }
+    std::cout << std::endl;
+
     std::cout << std::endl;
 
     pthread_mutex_unlock(&monitoraccess);
@@ -505,6 +529,34 @@ void * task_thread(void * arg)  {
   pthread_t               tid = pthread_self();
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
 
+  // Error handling for when the thread needs more than available
+  // pthread_mutex_lock(&resourceaccess);
+  for  (auto i : info->requiredr)  {
+    if  (RESOURCE_MAP.resources.count(i.first) == 0)  {
+      // When the thread is requesting a non-existent resource type
+      pthread_mutex_lock(&outputlock);
+      std::cout << "Thread: " << info->name << " (tid= " << std::hex << tid
+      << ") is requesting a resource that wasn't allocated ("
+      << i.first << ")" << std::endl
+      << "Quitting" << std::endl;
+      std::cout.copyfmt(std::ios(NULL));
+      exit(EXIT_FAILURE);
+      pthread_mutex_unlock(&outputlock);
+    }
+    else if  (i.second > RESOURCE_MAP.resources[i.first])  {
+      // The thread is requesting more resources than available in the system
+      pthread_mutex_lock(&outputlock);
+      std::cout << "Thread: " << info->name << " (tid= " << std::hex << tid
+      << ") is requesting more resources than available" << std::endl
+      << "Quitting" << std::endl;
+      std::cout.copyfmt(std::ios(NULL));
+      exit(EXIT_FAILURE);
+      pthread_mutex_unlock(&outputlock);
+    }
+    
+  }
+  // pthread_mutex_unlock(&resourceaccess);
+
   // Start up synchronization
   pthread_barrier_wait(&bar3);
 
@@ -512,7 +564,9 @@ void * task_thread(void * arg)  {
   tstart = times(NULL);
   pthread_mutex_lock(&outputlock);
   
-  std::cout << "\tStarting task " << info->name << std::endl;
+  std::cout << "\tStarting task: " << info->name << "\t(tid= " << std::hex
+  << tid << ")" << std::endl;
+  std::cout.copyfmt(std::ios(NULL));
   pthread_mutex_unlock(&outputlock);
 
   pthread_mutex_lock(&monitoraccess);
@@ -600,8 +654,20 @@ void * task_thread(void * arg)  {
     }
   }
 
-  // Synchronization of thread exit
-  pthread_barrier_wait(&bar2);
+  // Putting the thread into the DONE category
+  pthread_mutex_lock(&monitoraccess);  // Entering monitor CS
+  taskmanager.idle.erase(info->name);
+  taskmanager.idlecount--;
+  taskmanager.done.insert(info->name);
+  taskmanager.donecount++;
+  pthread_mutex_unlock(&monitoraccess);
+
+  pthread_barrier_wait(&bar2);  // Notifying main thread that we are done
+  pthread_barrier_wait(&bar4);  // Synchronizing for exit output
+  pthread_mutex_lock(&outputlock);
+  std::cout << "\tFreeing thread: " << info->name << "\t(tid= "
+  << std::hex << tid << ")" << std::endl;
+  pthread_mutex_unlock(&outputlock);
 
   pthread_exit(NULL);
 }
