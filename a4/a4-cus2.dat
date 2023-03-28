@@ -1,5 +1,6 @@
 resources charm:1 love:8 strange:1
 resources kat:1 love:10 sad:60 a:1 b:1 c:1
+resources cheese:2 up:1 down:3
 
 
 task    t1  500  1000 charm:1 strange:1  love:10
@@ -17,3 +18,10 @@ task    b3  254  50 c:1 a:1
 
 task    a4  700 700 c:1
 task    a6  700 700 kat:1
+
+task d2 500 500 cheese:1 up:1
+task d3 500 500 cheese:1 up:1
+task d4 500 500 down:2 cheese:1
+task d5 500 500 down:1 cheese:1
+task d6 1000 500 down:3 sad:58
+task d7 1000 500 down:2 sad:40

@@ -588,6 +588,13 @@ void * task_thread(void * arg)  {
     // Going through loop to access the resources
     for  (auto i : info->requiredr)  {
       // Iterating through ordered map. Since ordered, it will not cycle
+      /* TODO: Grab the resource in chunks, not one at a time*/
+      pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
+      pthread_mutex_lock(&resourceaccess);
+      pthread_mutex_unlock(&resourceaccess);
+      if  (AVAILR_MAP.resources[i.first] != 0)  {
+        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
+      }
       for  (j = 0; j < i.second; j++)  {
         // Truly checking resources one by one. Should prevent deadlock this way
         pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
