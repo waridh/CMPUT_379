@@ -530,7 +530,7 @@ void * task_thread(void * arg)  {
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
 
   // Error handling for when the thread needs more than available
-  // pthread_mutex_lock(&resourceaccess);
+  // Since truly read only, I am not going to protect access
   for  (auto i : info->requiredr)  {
     if  (RESOURCE_MAP.resources.count(i.first) == 0)  {
       // When the thread is requesting a non-existent resource type
@@ -553,9 +553,7 @@ void * task_thread(void * arg)  {
       exit(EXIT_FAILURE);
       pthread_mutex_unlock(&outputlock);
     }
-    
   }
-  // pthread_mutex_unlock(&resourceaccess);
 
   // Start up synchronization
   pthread_barrier_wait(&bar3);
