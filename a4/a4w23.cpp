@@ -32,7 +32,6 @@ header file though.*/
 // Global variables
 // Many of these become read-only after initial declaration in main
 static clock_t                start = times(NULL);
-static struct tms             cpustart;
 static int                    DEBUG = 1;
 static uint                   NITER;
 static int                    RESOURCET_COUNT = 0;
@@ -178,7 +177,6 @@ int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
   // Statically allocating some stuff because it's on the stack and has low mem
   /* Funny error: For some reason the dynamically allocated code is breaking.
   I don't know why, we we are making a kinda big buffer on the stack for this.*/
-  char *                  dynamicBuff;
   char                    staticBuff[1024];
   int                     tokenscount;
   int                     taskcount = 0;
@@ -502,7 +500,7 @@ void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
   clock_t                 tstart;
   int                     ran = 1;
-  uint                    j;
+  int                     j;
   uint                    completed = 0;
   pthread_t               tid = pthread_self();
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
