@@ -1,0 +1,11 @@
+resources bach:1 love:8 strange:1
+resources kat:1 love:10 sad:60
+
+
+task    t1  500  1000 bach:1 strange:1  love:10
+task    t2  500  1000 love:8  bach:1  kat:1
+task    t3  500  1000 love:2  strange:1  kat:1
+task    another  700 1000  bach:1 strange:1 kat:1
+task    c1  500  50 bach:1 kat:1
+task    c2  250  50 kat:1 strange:1
+task    c3  750  50  strange:1 bach:1

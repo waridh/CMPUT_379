@@ -384,10 +384,13 @@ void thread_creation(
         std::cout << std::endl;
       }
     }
-    std::cout << std::endl;
     pthread_mutex_unlock(&outputlock);
   }
-  
+  // Pre-output for starting thread
+  pthread_mutex_lock(&outputlock);
+  std::cout << std::endl;
+  std::cout << "Running threads:" << std::endl;
+  pthread_mutex_unlock(&outputlock);
   fp.close();
   return;
 }
@@ -511,7 +514,7 @@ void * task_thread(void * arg)  {
   tstart = times(NULL);
   pthread_mutex_lock(&outputlock);
   
-  std::cout << "Starting task " << info->name << std::endl;
+  std::cout << "\tStarting task " << info->name << std::endl;
   pthread_mutex_unlock(&outputlock);
 
   pthread_mutex_lock(&monitoraccess);
