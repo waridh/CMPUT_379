@@ -32,7 +32,7 @@ header file though.*/
 // Global variables
 // Many of these become read-only after initial declaration in main
 static clock_t                start = times(NULL);
-static int                    DEBUG = 1;
+static const int              DEBUG = 1;
 static uint                   NITER;
 static int                    RESOURCET_COUNT = 0;
 static long                   clktck = 0;  // For conversion into seconds
@@ -50,8 +50,6 @@ static pthread_mutex_t        outputlock;  // So that the threads can take turn
 static pthread_mutex_t        clock_setter;  // A critical section access
 static pthread_mutex_t        resourceaccess;  // For checking the thing
 static pthread_mutex_t        monitoraccess;  // Getting running details
-
-static pthread_cond_t         resourcecond;  // So that we could wake up wait
 
 // Critical sections
 
@@ -373,28 +371,23 @@ void thread_creation(
   }
   
   // Debugging output for the threads that have allocated
-  if (DEBUG)  {
-    pthread_mutex_lock(&outputlock);
-    std::cout << std::endl;
-    std::cout << "Task threads:\n\t";
-    for (i = 0; i < resourceidx; i++)  {
-      std::cout << "Name: " << threadr[i].name << ", idx: "
-      << threadr[i].idx << ", busyTime: " << threadr[i].busyTime
-      << ", idleTime: " << threadr[i].idleTime << ", ResourcesTypes: "
-      << threadr[i].rtypes << ", ";
-      for (auto j : threadr[i].requiredr)  {
-        std::cout << j.first << ": " << j.second << ", ";
-      }
-      if  (i != resourceidx - 1)  {
-        std::cout << "\n\t";
-      }  else  {
-        std::cout << std::endl;
-      }
-    }
-    pthread_mutex_unlock(&outputlock);
-  }
-  // Pre-output for starting thread
   pthread_mutex_lock(&outputlock);
+  std::cout << std::endl;
+  std::cout << "Task threads:\n\t";
+  for (i = 0; i < resourceidx; i++)  {
+    std::cout << "Name: " << threadr[i].name << ", idx: "
+    << threadr[i].idx << ", busyTime: " << threadr[i].busyTime
+    << ", idleTime: " << threadr[i].idleTime << ", ResourcesTypes: "
+    << threadr[i].rtypes << ", ";
+    for (auto j : threadr[i].requiredr)  {
+      std::cout << j.first << ": " << j.second << ", ";
+    }
+    if  (i != resourceidx - 1)  {
+      std::cout << "\n\t";
+    }  else  {
+      std::cout << std::endl;
+    }
+  }
   std::cout << std::endl;
   std::cout << "Running threads:" << std::endl;
   pthread_mutex_unlock(&outputlock);
@@ -435,6 +428,10 @@ void  thread_main(
 
   pthread_barrier_wait(&bar2);  // Synchronizing the exit
   pthread_kill(*monitorthread, SIGALRM);  // Ending the monitor thread
+  if  (DEBUG)  {
+    // Some debug
+    std::cout << "Sent signal to the monitor thread" << std::endl;
+  }
   pthread_mutex_lock(&monitormutex);  // monitor sync
   // Join the thread and freeing the resources
   std::cout << std::endl << "Freeing resources: " << std::endl;
@@ -482,9 +479,24 @@ void * monitor_thread(void * arg)  {
   // Implement thread synchronization so that we don't get unexpected thing
 
   while (1)  {
+    
+    // Debugging check for how many resources are available
+    pthread_mutex_lock(&outputlock);
+    if  (DEBUG)  {
+      // Sending output for what resources are available
+      pthread_mutex_lock(&resourceaccess);
+      std::cout << std::endl << "resources: ";
+      for  (auto i : AVAILR_MAP.resources)  {
+        std::cout << '\t' << i.first << ": " << i.second << std::endl;
+      }
+      pthread_mutex_unlock(&resourceaccess);
+      pthread_mutex_lock(&monitoraccess);
+      std::cout << "\n\t\t[RUN]\t" << taskmanager.runcount << std::endl;
+      pthread_mutex_unlock(&monitoraccess);
+    }
 
     // Critical section safety rails
-    pthread_mutex_lock(&outputlock);
+    
     pthread_mutex_lock(&monitoraccess);
 
     // Printing out the waiting threads
@@ -518,16 +530,9 @@ void * monitor_thread(void * arg)  {
 
     pthread_mutex_unlock(&monitoraccess);
 
-    pthread_mutex_lock(&resourceaccess);
-    if  (DEBUG)  {
-      // Sending output for what resources are available
-      std::cout << std::endl << "resources: ";
-      for  (auto i : AVAILR_MAP.resources)  {
-        std::cout << '\t' << i.first << ": " << i.second << std::endl;
-      }
-      std::cout << std::endl;
-    }
-    pthread_mutex_unlock(&resourceaccess);
+    
+    
+    
     pthread_mutex_unlock(&outputlock);
     usleep((*monitorTime) * 1000);
   }
@@ -538,13 +543,13 @@ void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
   clock_t                 tstart;
   int                     ran = 1;
-  int                     j;
   uint                    completed = 0;
   pthread_t               tid = pthread_self();
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
 
   // Error handling for when the thread needs more than available
   // Since truly read only, I am not going to protect access
+  pthread_mutex_lock(&resourceaccess);
   for  (auto i : info->requiredr)  {
     if  (RESOURCE_MAP.resources.count(i.first) == 0)  {
       // When the thread is requesting a non-existent resource type
@@ -568,6 +573,7 @@ void * task_thread(void * arg)  {
       pthread_mutex_unlock(&outputlock);
     }
   }
+  pthread_mutex_unlock(&resourceaccess);
 
   // Start up synchronization
   pthread_barrier_wait(&bar3);
@@ -614,13 +620,31 @@ void * task_thread(void * arg)  {
           &AVAILR_MAP.conditionsignal[i.first],
           &AVAILR_MAP.emptylock[i.first]
         );
-        std::cout << info->name << " has gotten out of wait" << std::endl;
       }
 
-      pthread_mutex_lock(&resourceaccess);  // Letting only a thread write
-      AVAILR_MAP.resources[i.first] =- i.second;  // Taking what we need
-      pthread_mutex_unlock(&resourceaccess);  // Letting others write
-      pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);  // Letting other lk
+      if  (AVAILR_MAP.resources[i.first] >= i.second)  {
+        
+        // pthread_mutex_lock(&outputlock);
+        // std::cout << "Thread: " << info->name << std::endl;
+        // std::cout << "\t" << i.first << ": " << i.second << std::endl;
+        // std::cout << "Available:\t" << AVAILR_MAP.resources[i.first]
+        // << std::endl;
+        // pthread_mutex_unlock(&outputlock);
+
+        pthread_mutex_lock(&resourceaccess);  // Letting only a thread write
+        AVAILR_MAP.resources[i.first] -= i.second;  // Taking what we need
+        pthread_mutex_unlock(&resourceaccess);  // Letting others write
+        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);  // Letting other lk
+      }  else  {
+        pthread_mutex_lock(&outputlock);
+        std::cout << "The condition did not work as planned, please fix"
+        << std::endl;
+        pthread_mutex_unlock(&outputlock);
+
+        exit(EXIT_FAILURE);
+      }
+
+      
        
     }
     if (ran)  {
@@ -650,32 +674,14 @@ void * task_thread(void * arg)  {
 
         pthread_mutex_lock(&resourceaccess);  // For writing into the struct
         // Returning the resources
-        AVAILR_MAP.resources[i.first] =+ i.second;
+        AVAILR_MAP.resources[i.first] += i.second;
         pthread_mutex_unlock(&resourceaccess);
 
         // Sending the condition
         pthread_cond_signal(&AVAILR_MAP.conditionsignal[i.first]);
-
-        pthread_mutex_lock(&outputlock);
-        std::cout << info->name << " has sent condition signal" << std::endl;
-        pthread_mutex_unlock(&outputlock);
-        // Letting go of semaphores
         
         
-        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
-        // for  (j = 0; j < i.second; j++)  {
-        //   // Truly checking resources one by one. Should prevent deadlock this way
-        //   pthread_mutex_lock(&resourceaccess);
-        //   if  (AVAILR_MAP.resources[i.first] == 0)  {
-        //     // For when we are returning resource to an empty struct
-        //     AVAILR_MAP.resources[i.first]++;
-        //     pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
-        //   }  else  {
-        //     AVAILR_MAP.resources[i.first]++;
-        //   }
-        //   pthread_mutex_unlock(&resourceaccess);
-          
-        // }
+        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]); 
       }
 
       // Putting the thread into idle
@@ -701,7 +707,7 @@ void * task_thread(void * arg)  {
 
   pthread_barrier_wait(&bar2);  // Notifying main thread that we are done
   pthread_barrier_wait(&bar4);  // Synchronizing for exit output
-  pthread_mutex_lock(&outputlock);
+  pthread_mutex_lock(&outputlock);  // Creating the freed thread output
   std::cout << "\tFreeing thread: " << info->name << "\t(tid= "
   << std::hex << tid << ")" << std::endl;
   pthread_mutex_unlock(&outputlock);
