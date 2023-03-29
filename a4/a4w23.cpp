@@ -45,7 +45,6 @@ static pthread_barrier_t      bar2;  // Barrier for stopping all the threads
 static pthread_barrier_t      bar3;  // Need this one to let threads start good
 static pthread_barrier_t      bar4;  // For the final closing thread output
 
-static pthread_mutex_t        monitormutex;  // Mutex for the monitor thread
 static pthread_mutex_t        outputlock;  // So that the threads can take turn
 static pthread_mutex_t        clock_setter;  // A critical section access
 static pthread_mutex_t        resourceaccess;  // For checking the thing
@@ -55,6 +54,30 @@ static pthread_mutex_t        monitoraccess;  // Getting running details
 
 static MONITOR_T              taskmanager;  // Details on what is running
 static AVAILR_T               AVAILR_MAP;
+
+// Cleanup function
+void pthread_type_destroyer()  {
+  // Mutexes first
+  
+  // Trying the locks for all
+  pthread_mutex_trylock(&outputlock);
+  pthread_mutex_trylock(&clock_setter);
+  pthread_mutex_trylock(&resourceaccess);
+  pthread_mutex_trylock(&monitoraccess);
+
+  pthread_mutex_unlock(&outputlock);
+  pthread_mutex_unlock(&clock_setter);
+  pthread_mutex_unlock(&resourceaccess);
+  pthread_mutex_unlock(&monitoraccess);
+
+  // Time to delete
+  pthread_mutex_destroy(&outputlock);
+  pthread_mutex_destroy(&clock_setter);
+  pthread_mutex_destroy(&resourceaccess);
+  pthread_mutex_destroy(&monitoraccess);
+
+
+}
 
 //=============================================================================
 // Error handling
@@ -243,13 +266,60 @@ int colon_tokenize(std::string * pair, std::string * name)  {
 // Signals
 
 void monitor_signal(int signum)  {
+  pthread_mutex_trylock(&monitoraccess);
   pthread_mutex_lock(&outputlock);
+  // Sending out the final monitor output
+  if  (DEBUG)  {
+    // Sending output for what resources are available
+    pthread_mutex_lock(&resourceaccess);
+    std::cout << std::endl << "resources: ";
+    for  (auto i : AVAILR_MAP.resources)  {
+      std::cout << '\t' << i.first << ": " << i.second << std::endl;
+    }
+    pthread_mutex_unlock(&resourceaccess);
+
+    std::cout << "\n\t\t[RUN]\t" << taskmanager.runcount << std::endl;
+
+  }
+
+  // Critical section safety rails
+  
+
+  // Printing out the waiting threads
+  std::cout << std::endl << "monitor:\t[WAIT]\t";
+  for  (auto i : taskmanager.wait)  {
+    std::cout << i << ' ';
+  }
+  std::cout << std::endl;
+
+  // Printing out the running threads
+  std::cout << "\t\t[RUN]\t";
+  for  (auto i : taskmanager.run)  {
+    std::cout << i << ' ';
+  }
+  std::cout << std::endl;
+
+  // Printing out the idle threads
+  std::cout << "\t\t[IDLE]\t";
+  for  (auto i : taskmanager.idle)  {
+    std::cout << i << ' ';
+  }
+  std::cout << std::endl;
+
+  std::cout << "\t\t[DONE]\t";
+  for  (auto i : taskmanager.done)  {
+    std::cout << i << ' ';
+  }
+  std::cout << std::endl;
+
+  std::cout << std::endl;
+
+  
   std::cout << std::endl << "All task threads are done" << std::endl;
   std::cout << "Exiting monitor thread" << std::endl;
   pthread_mutex_unlock(&outputlock);
+  pthread_mutex_unlock(&monitoraccess);
 
-  pthread_mutex_trylock(&monitormutex);  // Preventing undefined behaviour
-  pthread_mutex_unlock(&monitormutex);
   pthread_exit(NULL);
 }
 
@@ -268,7 +338,7 @@ void resource_gatherer(std::string * resource_line, int tokenscount)  {
     maxamount = colon_tokenize(&(resource_line[i]), &name);
     // Mass insertion into the map
 
-    if (RESOURCE_MAP.resources.find(name) != RESOURCE_MAP.resources.end())  {
+    if (RESOURCE_MAP.resources.count(name) != 0)  {
       // Checking if the key already exists
       RESOURCE_MAP.resources[name] += maxamount;
     }  else  {
@@ -430,11 +500,8 @@ void  thread_main(
 
   pthread_barrier_wait(&bar2);  // Synchronizing the exit
   pthread_kill(*monitorthread, SIGALRM);  // Ending the monitor thread
-  if  (DEBUG)  {
-    // Some debug
-    std::cout << "Sent signal to the monitor thread" << std::endl;
-  }
-  pthread_mutex_lock(&monitormutex);  // monitor sync
+  usleep(5000);  // 5 msec wait so that it doesn't cause race condition
+  pthread_mutex_lock(&monitoraccess);
   // Join the thread and freeing the resources
   std::cout << std::endl << "Freeing resources: " << std::endl;
   pthread_barrier_wait(&bar4);
@@ -442,7 +509,9 @@ void  thread_main(
     // Joining the thread
     pthread_join(threads[i], NULL);
   }
-  pthread_mutex_unlock(&monitormutex);
+  pthread_mutex_unlock(&monitoraccess);
+  std::cout << "Destroying the resources now" << std::endl;
+  pthread_type_destroyer();
 
   // Deleting the dynamically allocated stuff from the heap
   delete[] threadresources;
@@ -473,8 +542,6 @@ void * monitor_thread(void * arg)  {
   taskmanager.donecount = 0;
   pthread_mutex_unlock(&monitoraccess);
 
-  // Sync for the exit of the program
-  pthread_mutex_lock(&monitormutex);
   // Barier implement so that the monitor starts at the same time as the thread
   pthread_barrier_wait(&bar1);
 

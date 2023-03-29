@@ -25,3 +25,6 @@ task d4 500 500 down:2 cheese:1
 task d5 500 500 down:1 cheese:1
 task d6 1000 500 down:3 sad:58
 task d7 1000 500 down:2 sad:40
+
+task  k1  222 222 sad:18
+task  k2  444 444 sad:50
