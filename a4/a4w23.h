@@ -8,6 +8,7 @@ The header file for a4w23.cpp.
 
 // Included libraries
 #include  <map>
+#include  <semaphore.h>
 #include  <set>
 #include  <string>
 #include  <unordered_map>
@@ -68,6 +69,18 @@ typedef struct  {
   std::map<std::string, int>                requiredr;  // Using map cause order
 } THREADREQUIREMENTS;
 
+typedef struct  {
+  /*Making a megastruct that will hold both the pthread_t and the information */
+  THREADREQUIREMENTS                        info;
+  pthread_t                                 tid;
+}  THREADESSENCE;
+
+typedef struct  {
+  /* The big map using name as a key and the value being all information
+  relating to a thread. This should make our program very dynamic*/
+  std::map<std::string, THREADESSENCE>      thread;
+}  THREADMAP;
+
 
 // Function declaration
 
@@ -115,8 +128,9 @@ is passed back via pointer, and the value is returned*/
 
 void    thread_creation(
   char * filename,
-  THREADREQUIREMENTS * threadr,
-  pthread_t * threads
+  THREADREQUIREMENTS *  threadr,
+  pthread_t *           threads,
+  THREADMAP *           thread_map
   );
 /* Second readthrough of the file so that we can create the thread separately
 from the resource allocation. Allows for easier synchronization too?*/
@@ -140,7 +154,8 @@ void    thread_creator(
   int                     idx,
   int                     tokenscount,
   THREADREQUIREMENTS *    inputstruct,
-  pthread_t *             thread
+  pthread_t *             thread,
+  THREADMAP *             threadm
   );
 /* This function will create the task threads from the line present in the
 input. The goal here is to launch the thread using this function*/
@@ -148,5 +163,10 @@ input. The goal here is to launch the thread using this function*/
 void monitor_signal(int signum);
 /* Sending a signal that will just terminal the monitor thread. Good for sync*/
 
+void pthread_mutex_destroyer();
+/* This function clears the existing mutexs*/
+
+void barrier_ender();
+/* Clears the barriers*/
 #endif  /* A4W23_H */
 
