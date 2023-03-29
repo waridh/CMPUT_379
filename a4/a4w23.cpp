@@ -44,11 +44,14 @@ static pthread_barrier_t      bar1;  // Barrier so all threads start at once
 static pthread_barrier_t      bar2;  // Barrier for stopping all the threads
 static pthread_barrier_t      bar3;  // Need this one to let threads start good
 static pthread_barrier_t      bar4;  // For the final closing thread output
+
 static pthread_mutex_t        monitormutex;  // Mutex for the monitor thread
 static pthread_mutex_t        outputlock;  // So that the threads can take turn
 static pthread_mutex_t        clock_setter;  // A critical section access
 static pthread_mutex_t        resourceaccess;  // For checking the thing
 static pthread_mutex_t        monitoraccess;  // Getting running details
+
+static pthread_cond_t         resourcecond;  // So that we could wake up wait
 
 // Critical sections
 
@@ -485,27 +488,27 @@ void * monitor_thread(void * arg)  {
     pthread_mutex_lock(&monitoraccess);
 
     // Printing out the waiting threads
-    std::cout << std::endl << "montor:\t[WAIT]\t";
+    std::cout << std::endl << "monitor:\t[WAIT]\t";
     for  (auto i : taskmanager.wait)  {
       std::cout << i << ' ';
     }
     std::cout << std::endl;
 
     // Printing out the running threads
-    std::cout << "\t[RUN]\t";
+    std::cout << "\t\t[RUN]\t";
     for  (auto i : taskmanager.run)  {
       std::cout << i << ' ';
     }
     std::cout << std::endl;
 
     // Printing out the idle threads
-    std::cout << "\t[IDLE]\t";
+    std::cout << "\t\t[IDLE]\t";
     for  (auto i : taskmanager.idle)  {
       std::cout << i << ' ';
     }
     std::cout << std::endl;
 
-    std::cout << "\t[DONE]\t";
+    std::cout << "\t\t[DONE]\t";
     for  (auto i : taskmanager.done)  {
       std::cout << i << ' ';
     }
@@ -514,6 +517,17 @@ void * monitor_thread(void * arg)  {
     std::cout << std::endl;
 
     pthread_mutex_unlock(&monitoraccess);
+
+    pthread_mutex_lock(&resourceaccess);
+    if  (DEBUG)  {
+      // Sending output for what resources are available
+      std::cout << std::endl << "resources: ";
+      for  (auto i : AVAILR_MAP.resources)  {
+        std::cout << '\t' << i.first << ": " << i.second << std::endl;
+      }
+      std::cout << std::endl;
+    }
+    pthread_mutex_unlock(&resourceaccess);
     pthread_mutex_unlock(&outputlock);
     usleep((*monitorTime) * 1000);
   }
@@ -589,31 +603,25 @@ void * task_thread(void * arg)  {
     for  (auto i : info->requiredr)  {
       // Iterating through ordered map. Since ordered, it will not cycle
       /* TODO: Grab the resource in chunks, not one at a time*/
-      pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
-      pthread_mutex_lock(&resourceaccess);
-      if  (AVAILR_MAP.resources[i.first] >= i.second)  {
-        AVAILR_MAP.resources[i.first] =- i.second;
-        pthread_mutex_unlock(&resourceaccess);
-        if  (AVAILR_MAP.resources[i.first] != 0)  {
-          pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
-        }
-      }  else  {
-        // Waiting
-      }
-      
-      // for  (j = 0; j < i.second; j++)  {
-      //   // Truly checking resources one by one. Should prevent deadlock this way
-      //   pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
-      //   pthread_mutex_lock(&resourceaccess);  // Needed for resource return
-      //   // Taking the resource
-      //   AVAILR_MAP.resources[i.first]--;
 
-      //   pthread_mutex_unlock(&resourceaccess);
-      //   if  (AVAILR_MAP.resources[i.first] != 0)  {
-      //     pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
-      //   }
-        
-      // }
+      // So that we can test the specific resource
+      pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
+
+      // Waiting until there is enough resources available
+      while  (AVAILR_MAP.resources[i.first] < i.second)  {
+        // Waiting for enough resources
+        pthread_cond_wait(
+          &AVAILR_MAP.conditionsignal[i.first],
+          &AVAILR_MAP.emptylock[i.first]
+        );
+        std::cout << info->name << " has gotten out of wait" << std::endl;
+      }
+
+      pthread_mutex_lock(&resourceaccess);  // Letting only a thread write
+      AVAILR_MAP.resources[i.first] =- i.second;  // Taking what we need
+      pthread_mutex_unlock(&resourceaccess);  // Letting others write
+      pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);  // Letting other lk
+       
     }
     if (ran)  {
       // Taking the busy time to run. We have gotten all the resource we needed
@@ -637,19 +645,37 @@ void * task_thread(void * arg)  {
       // Going through loop to access the resources
       for  (auto i : info->requiredr)  {
         // Iterating through ordered map. Since ordered, it will not cycle
-        for  (j = 0; j < i.second; j++)  {
-          // Truly checking resources one by one. Should prevent deadlock this way
-          pthread_mutex_lock(&resourceaccess);
-          if  (AVAILR_MAP.resources[i.first] == 0)  {
-            // For when we are returning resource to an empty struct
-            AVAILR_MAP.resources[i.first]++;
-            pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
-          }  else  {
-            AVAILR_MAP.resources[i.first]++;
-          }
-          pthread_mutex_unlock(&resourceaccess);
+
+        pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
+
+        pthread_mutex_lock(&resourceaccess);  // For writing into the struct
+        // Returning the resources
+        AVAILR_MAP.resources[i.first] =+ i.second;
+        pthread_mutex_unlock(&resourceaccess);
+
+        // Sending the condition
+        pthread_cond_signal(&AVAILR_MAP.conditionsignal[i.first]);
+
+        pthread_mutex_lock(&outputlock);
+        std::cout << info->name << " has sent condition signal" << std::endl;
+        pthread_mutex_unlock(&outputlock);
+        // Letting go of semaphores
+        
+        
+        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
+        // for  (j = 0; j < i.second; j++)  {
+        //   // Truly checking resources one by one. Should prevent deadlock this way
+        //   pthread_mutex_lock(&resourceaccess);
+        //   if  (AVAILR_MAP.resources[i.first] == 0)  {
+        //     // For when we are returning resource to an empty struct
+        //     AVAILR_MAP.resources[i.first]++;
+        //     pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);
+        //   }  else  {
+        //     AVAILR_MAP.resources[i.first]++;
+        //   }
+        //   pthread_mutex_unlock(&resourceaccess);
           
-        }
+        // }
       }
 
       // Putting the thread into idle

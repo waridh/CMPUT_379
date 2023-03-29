@@ -46,6 +46,8 @@ typedef struct  {
   std::unordered_map<std::string, int>                resources;
 
   std::unordered_map<std::string, pthread_mutex_t>    emptylock;
+
+  std::unordered_map<std::string, pthread_cond_t>     conditionsignal;
 } AVAILR_T;
 
 typedef struct  {
