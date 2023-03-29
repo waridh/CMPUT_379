@@ -247,6 +247,8 @@ void monitor_signal(int signum)  {
   std::cout << std::endl << "All task threads are done" << std::endl;
   std::cout << "Exiting monitor thread" << std::endl;
   pthread_mutex_unlock(&outputlock);
+
+  pthread_mutex_trylock(&monitormutex);  // Preventing undefined behaviour
   pthread_mutex_unlock(&monitormutex);
   pthread_exit(NULL);
 }
