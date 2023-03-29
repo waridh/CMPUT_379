@@ -91,6 +91,10 @@ void    cmdline_err(int argc, char * argv[]);
 void    barrier_err();
 /* For when we cannot initialize the barrier obj*/
 
+void    thread_init_err(THREADREQUIREMENTS * info, pthread_t * tid);
+/* Error handling at the initialization of each thread. When there are too
+many resource requirements and when the resource does not exist*/
+
 // Utilities
 
 void    timeprint(

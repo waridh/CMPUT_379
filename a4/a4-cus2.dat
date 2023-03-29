@@ -9,11 +9,11 @@ task    t3  500  1000 love:2  strange:1  kat:1
 task    another  700 1000  charm:1 strange:1 kat:1
 
 # Trying our best to create a deadlock and also test concurrency
-task    c1  700  50 charm:1 kat:1
-task    c2  750  50 kat:1 strange:1
-task    c3  550  50  strange:1 charm:1
-task    b1  500  50 a:1 b:1
-task    b2  750  50 b:1 c:1
+task    c1  700  500 charm:1 kat:1
+task    c2  750  500 kat:1 strange:1
+task    c3  550  500  strange:1 charm:1
+task    b1  500  500 a:1 b:1
+task    b2  750  500 b:1 c:1
 task    b3  250  500 c:1 a:1
 
 task    a4  700 70 c:1

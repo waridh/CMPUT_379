@@ -35,7 +35,7 @@ Extra note: Most of the function descriptions are in the header file
 // Global variables
 // Many of these become read-only after initial declaration in main
 static clock_t                start = times(NULL);
-static const int              DEBUG = 0;
+static const int              DEBUG = 1;
 static uint                   NITER;
 static int                    RESOURCET_COUNT = 0;
 static long                   clktck = 0;  // For conversion into seconds
@@ -128,6 +128,35 @@ void barrier_err()  {
   std::cout << "Failed to initialize the barrier object." << std::endl
   << "Quitting" << std::endl;
   exit(EXIT_FAILURE);
+}
+
+void thread_init_err(THREADREQUIREMENTS * info, pthread_t * tid)  {
+  // Going to treat it as a critical section
+  pthread_mutex_lock(&resourceaccess);  // Guard in case there is some write
+  for  (auto i : info->requiredr)  {
+    if  (RESOURCE_MAP.resources.count(i.first) == 0)  {
+      // When the thread is requesting a non-existent resource type
+      pthread_mutex_lock(&outputlock);
+      std::cout << "Thread: " << info->name << " (tid= " << std::hex << *tid
+      << ") is requesting a resource that wasn't allocated ("
+      << i.first << ")" << std::endl
+      << "Quitting" << std::endl;
+      std::cout.copyfmt(std::ios(NULL));
+      exit(EXIT_FAILURE);
+      pthread_mutex_unlock(&outputlock);
+    }  else if  (i.second > RESOURCE_MAP.resources[i.first])  {
+      // The thread is requesting more resources than available in the system
+      pthread_mutex_lock(&outputlock);
+      std::cout << "Thread: " << info->name << " (tid= " << std::hex << *tid
+      << ") is requesting more resources than available" << std::endl
+      << "Quitting" << std::endl;
+      std::cout.copyfmt(std::ios(NULL));
+      exit(EXIT_FAILURE);
+      pthread_mutex_unlock(&outputlock);
+    }
+  }
+  pthread_mutex_unlock(&resourceaccess);
+  return;
 }
 
 //=============================================================================
@@ -276,9 +305,6 @@ void monitor_signal(int signum)  {
       std::cout << '\t' << i.first << ": " << i.second << std::endl;
     }
     pthread_mutex_unlock(&resourceaccess);
-
-    std::cout << "\n\t\t[RUN]\t" << taskmanager.runcount << std::endl;
-
   }
 
   // Printing out the waiting threads
@@ -560,10 +586,7 @@ void * monitor_thread(void * arg)  {
       for  (auto i : AVAILR_MAP.resources)  {
         std::cout << '\t' << i.first << ": " << i.second << std::endl;
       }
-      pthread_mutex_unlock(&resourceaccess);
-      pthread_mutex_lock(&monitoraccess);
-      std::cout << "\n\t\t[RUN]\t" << taskmanager.runcount << std::endl;
-      pthread_mutex_unlock(&monitoraccess);
+      pthread_mutex_unlock(&resourceaccess); 
     }
 
     // Critical section safety rails
@@ -616,30 +639,7 @@ void * task_thread(void * arg)  {
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
 
   // Error handling for when the thread needs more than available
-  pthread_mutex_lock(&resourceaccess);  // Guard in case there is some write
-  for  (auto i : info->requiredr)  {
-    if  (RESOURCE_MAP.resources.count(i.first) == 0)  {
-      // When the thread is requesting a non-existent resource type
-      pthread_mutex_lock(&outputlock);
-      std::cout << "Thread: " << info->name << " (tid= " << std::hex << tid
-      << ") is requesting a resource that wasn't allocated ("
-      << i.first << ")" << std::endl
-      << "Quitting" << std::endl;
-      std::cout.copyfmt(std::ios(NULL));
-      exit(EXIT_FAILURE);
-      pthread_mutex_unlock(&outputlock);
-    }  else if  (i.second > RESOURCE_MAP.resources[i.first])  {
-      // The thread is requesting more resources than available in the system
-      pthread_mutex_lock(&outputlock);
-      std::cout << "Thread: " << info->name << " (tid= " << std::hex << tid
-      << ") is requesting more resources than available" << std::endl
-      << "Quitting" << std::endl;
-      std::cout.copyfmt(std::ios(NULL));
-      exit(EXIT_FAILURE);
-      pthread_mutex_unlock(&outputlock);
-    }
-  }
-  pthread_mutex_unlock(&resourceaccess);
+  thread_init_err(info, &tid);
 
   // Start up synchronization
   pthread_barrier_wait(&bar3);  // We like to keep the threads at around same
@@ -688,20 +688,14 @@ void * task_thread(void * arg)  {
         );
       }
 
-      if  (AVAILR_MAP.resources[i.first] >= i.second)  {
-        
-        // pthread_mutex_lock(&outputlock);
-        // std::cout << "Thread: " << info->name << std::endl;
-        // std::cout << "\t" << i.first << ": " << i.second << std::endl;
-        // std::cout << "Available:\t" << AVAILR_MAP.resources[i.first]
-        // << std::endl;
-        // pthread_mutex_unlock(&outputlock);
+      if  (AVAILR_MAP.resources[i.first] >= i.second)  {  // Should be case 
 
         pthread_mutex_lock(&resourceaccess);  // Letting only a thread write
         AVAILR_MAP.resources[i.first] -= i.second;  // Taking what we need
         pthread_mutex_unlock(&resourceaccess);  // Letting others write
-        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);  // Letting other lk
+        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);  // Letting others
       }  else  {
+        // Extremely weird error handling
         pthread_mutex_lock(&outputlock);
         std::cout << "The condition did not work as planned, please fix"
         << std::endl;
