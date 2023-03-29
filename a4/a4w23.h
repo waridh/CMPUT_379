@@ -63,7 +63,6 @@ typedef struct  {
     The time stuff is specified as millisecs*/
   uint                                      busyTime; // Time spent by task
   uint                                      idleTime; // Break time
-  uint                                      idx;
   uint                                      rtypes;  // The amount of types
   std::string                               name;
   std::map<std::string, int>                requiredr;  // Using map cause order
@@ -127,18 +126,16 @@ pointer, and then separate it into the name and number values. The string name
 is passed back via pointer, and the value is returned*/
 
 void    thread_creation(
-  char * filename,
-  THREADREQUIREMENTS *  threadr,
-  pthread_t *           threads,
+  char *                filename,
   THREADMAP *           thread_map
   );
 /* Second readthrough of the file so that we can create the thread separately
 from the resource allocation. Allows for easier synchronization too?*/
 
 void    thread_main(
-  char * filename,
-  int tasksamount,
-  pthread_t * monitorthread
+  char *        filename,
+  int           tasksamount,
+  pthread_t *   monitorthread
   );
 /* The main function for threading. Creates threads and also waits for them to
 exit to retrieve resources and keep the program synchronized.
@@ -153,8 +150,6 @@ void    thread_creator(
   std::string *           task_list,
   int                     idx,
   int                     tokenscount,
-  THREADREQUIREMENTS *    inputstruct,
-  pthread_t *             thread,
   THREADMAP *             threadm
   );
 /* This function will create the task threads from the line present in the
@@ -163,10 +158,10 @@ input. The goal here is to launch the thread using this function*/
 void monitor_signal(int signum);
 /* Sending a signal that will just terminal the monitor thread. Good for sync*/
 
-void pthread_mutex_destroyer();
-/* This function clears the existing mutexs*/
+// Clean up
 
 void barrier_ender();
 /* Clears the barriers*/
+
 #endif  /* A4W23_H */
 
