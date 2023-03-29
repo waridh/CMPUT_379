@@ -1,0 +1,12 @@
+resources charm:20 love:80 strange:55 a:1 b:1 c:1
+
+
+task    t1  500  1 charm:12 strange:50  love:80
+task    t2  500  0 love:8  charm:1  strange:5
+task    t3  500  10 love:18  strange:12
+task    another  700 10  charm:2 strange:43 love:70
+
+task    a1  500 10 a:1 b:1
+task    a2  500 10 b:1 c:1
+task    a3  500 10 a:1 c:1
+

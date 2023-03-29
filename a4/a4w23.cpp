@@ -8,7 +8,10 @@ The final assignment for CMPUT 379
 
 /* Because this is an assignment, I don't want to split the program into
 multiple files. That seems more annoying for submission. I will try using a
-header file though.*/
+header file though.
+
+Extra note: Most of the function descriptions are in the header file
+*/
 
 // Libraries
 #include "a4w23.h"
@@ -29,12 +32,10 @@ header file though.*/
 #include <unistd.h>
 #include <unordered_map>
 
-// Define
-
 // Global variables
 // Many of these become read-only after initial declaration in main
 static clock_t                start = times(NULL);
-static const int              DEBUG = 1;
+static const int              DEBUG = 0;
 static uint                   NITER;
 static int                    RESOURCET_COUNT = 0;
 static long                   clktck = 0;  // For conversion into seconds
@@ -279,9 +280,6 @@ void monitor_signal(int signum)  {
     std::cout << "\n\t\t[RUN]\t" << taskmanager.runcount << std::endl;
 
   }
-
-  // Critical section safety rails
-  
 
   // Printing out the waiting threads
   std::cout << std::endl << "monitor:\t[WAIT]\t";

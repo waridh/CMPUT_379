@@ -3,28 +3,29 @@ resources kat:1 love:10 sad:60 a:1 b:1 c:1
 resources cheese:2 up:1 down:3
 
 
-task    t1  50  100 charm:1 strange:1  love:10
-task    t2  50  100 love:8  charm:1  kat:1
-task    t3  50  100 love:2  strange:1  kat:1
-task    another  70 100  charm:1 strange:1 kat:1
+task    t1  500  1000 charm:1 strange:1  love:10
+task    t2  500  1000 love:8  charm:1  kat:1
+task    t3  500  1000 love:2  strange:1  kat:1
+task    another  700 1000  charm:1 strange:1 kat:1
 
 # Trying our best to create a deadlock and also test concurrency
-task    c1  70  50 charm:1 kat:1
-task    c2  75  50 kat:1 strange:1
-task    c3  55  50  strange:1 charm:1
-task    b1  50  50 a:1 b:1
-task    b2  75  50 b:1 c:1
-task    b3  25  50 c:1 a:1
+task    c1  700  50 charm:1 kat:1
+task    c2  750  50 kat:1 strange:1
+task    c3  550  50  strange:1 charm:1
+task    b1  500  50 a:1 b:1
+task    b2  750  50 b:1 c:1
+task    b3  250  500 c:1 a:1
 
-task    a4  70 70 c:1
-task    a6  70 70 kat:1
+task    a4  700 70 c:1
+task    a6  700 70 kat:1
 
-task d2 50 20 cheese:1 up:1
-task d3 50 50 cheese:1 up:1
-task d4 50 20 down:2 cheese:1
-task d5 50 50 down:1 cheese:1
-task d6 100 50 down:3 sad:58
-task d7 100 50 down:2 sad:40
+# Try to make it as contested as possible
+task d2 500 200 cheese:1 up:1
+task d3 500 50 cheese:1 up:1
+task d4 500 200 down:2 cheese:1
+task d5 500 500 down:1 cheese:1
+task d6 1000 500 down:3 sad:58
+task d7 1000 50 down:2 sad:40
 
-task  k1  22 22 sad:18
-task  k2  44 44 sad:50
+task  k1  224 224 sad:18
+task  k2  444 444 sad:50
