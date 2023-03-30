@@ -11,6 +11,7 @@ multiple files. That seems more annoying for submission. I will try using a
 header file though.
 
 Extra note: Most of the function descriptions are in the header file
+CLANG++
 */
 
 // Libraries
@@ -35,7 +36,7 @@ Extra note: Most of the function descriptions are in the header file
 // Global variables
 // Many of these become read-only after initial declaration in main
 static clock_t                start = times(NULL);
-static const int              DEBUG = 1;
+static const int              DEBUG = 0;
 static uint                   NITER;
 static int                    RESOURCET_COUNT = 0;
 static long                   clktck = 0;  // For conversion into seconds
@@ -674,7 +675,6 @@ void * task_thread(void * arg)  {
     // Going through loop to access the resources
     for  (auto i : info->requiredr)  {
       // Iterating through ordered map. Since ordered, it will not cycle
-      /* TODO: Grab the resource in chunks, not one at a time*/
 
       // So that we can test the specific resource
       pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
