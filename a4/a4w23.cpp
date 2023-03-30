@@ -16,6 +16,7 @@ CLANG++
 
 // Libraries
 #include "a4w23.h"
+#include <assert.h>
 #include <cstring>
 #include <exception>
 #include <fcntl.h>
@@ -49,6 +50,8 @@ static pthread_barrier_t      bar2;  // Barrier for stopping all the threads
 static pthread_barrier_t      bar3;  // Need this one to let threads start good
 static pthread_barrier_t      bar4;  // For the final closing thread output
 static pthread_barrier_t      bar5;  // Another barrier
+
+static pthread_cond_t         resourcecond;  // Using simplified method
 
 static pthread_mutex_t        outputlock;  // So that the threads can take turn
 static pthread_mutex_t        clock_setter;  // A critical section access
@@ -634,7 +637,7 @@ void * monitor_thread(void * arg)  {
 void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
   clock_t                 tstart;
-  int                     ran = 1;
+  int                     ran;
   uint                    completed = 0;
   pthread_t               tid = pthread_self();
   THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
@@ -672,44 +675,44 @@ void * task_thread(void * arg)  {
     taskmanager.waitcount++; 
     pthread_mutex_unlock(&monitoraccess);
 
+    /* Checking if there are enough resources to run the program*/
+
+    pthread_mutex_lock(&resourceaccess);
+
     // Going through loop to access the resources
-    for  (auto i : info->requiredr)  {
-      // Iterating through ordered map. Since ordered, it will not cycle
-
-      // So that we can test the specific resource
-      pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
-
-      // Waiting until there is enough resources available
-      while  (AVAILR_MAP.resources[i.first] < i.second)  {
-        // Waiting for enough resources
+    while  (1)  {
+      // While loop for condition checking
+      ran = 1;
+      for  (auto i : info->requiredr)  {
+        // Checks for resources
+        if (AVAILR_MAP.resources[i.first] < i.second)  {
+          // Setting a flag that there wasn't enough
+          ran = 0;
+          break;
+        }
+      }
+      if (!ran)  {
+        // There wasn't enough resources
         pthread_cond_wait(
-          &AVAILR_MAP.conditionsignal[i.first],
-          &AVAILR_MAP.emptylock[i.first]
+          &resourcecond,
+          &resourceaccess
         );
-      }
-
-      if  (AVAILR_MAP.resources[i.first] >= i.second)  {  // Should be case 
-
-        pthread_mutex_lock(&resourceaccess);  // Letting only a thread write
-        AVAILR_MAP.resources[i.first] -= i.second;  // Taking what we need
-        pthread_mutex_unlock(&resourceaccess);  // Letting others write
-        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]);  // Letting others
+        continue;
       }  else  {
-        // Extremely weird error handling
-        pthread_mutex_lock(&outputlock);
-        std::cout << "The condition did not work as planned, please fix"
-        << std::endl;
-        pthread_mutex_unlock(&outputlock);
-
-        exit(EXIT_FAILURE);
+        // Passing the check for having enough resources
+        for  (auto i : info->requiredr)  {
+          AVAILR_MAP.resources[i.first] -= i.second;  // Actually taking it
+        }
+        break;
       }
-
-      
-       
     }
+    pthread_mutex_unlock(&resourceaccess);  // Done setting up for the program
+ 
     if (ran)  {
+      /* We get into this condition when there are enough resources available */
+
       // Taking the busy time to run. We have gotten all the resource we needed
-      pthread_mutex_lock(&monitoraccess);
+      pthread_mutex_lock(&monitoraccess);  // Updating the monitor structure
       taskmanager.wait.erase(info->name);
       taskmanager.waitcount--;
       taskmanager.run.insert(info->name);
@@ -717,8 +720,8 @@ void * task_thread(void * arg)  {
       pthread_mutex_unlock(&monitoraccess);
       usleep((info->busyTime) * 1000);
 
-      // Sending command line output
-      pthread_mutex_lock(&outputlock);
+      // Sending command line output (We have completed the task)
+      pthread_mutex_lock(&outputlock);  // Locking for output
       std::cout << "task: " << info->name << " (tid= 0x" << std::hex << tid;
       std::cout.copyfmt(std::ios(NULL));
       std::cout << ", iter=" << completed << ", time= "
@@ -727,22 +730,16 @@ void * task_thread(void * arg)  {
       
       // Releasing resources
       // Going through loop to access the resources
+      pthread_mutex_lock(&resourceaccess);
       for  (auto i : info->requiredr)  {
-        // Iterating through ordered map. Since ordered, it will not cycle
-
-        pthread_mutex_lock(&AVAILR_MAP.emptylock[i.first]);
-
-        pthread_mutex_lock(&resourceaccess);  // For writing into the struct
-        // Returning the resources
         AVAILR_MAP.resources[i.first] += i.second;
-        pthread_mutex_unlock(&resourceaccess);
-
-        // Sending the condition
-        pthread_cond_signal(&AVAILR_MAP.conditionsignal[i.first]);
-        
-        
-        pthread_mutex_unlock(&AVAILR_MAP.emptylock[i.first]); 
+ 
+        assert(
+          AVAILR_MAP.resources[i.first] <= RESOURCE_MAP.resources[i.first]
+        );
       }
+      pthread_cond_signal(&resourcecond);  // Wake up the waiting thread
+      pthread_mutex_unlock(&resourceaccess);  // Let those threads fight for it 
 
       // Putting the thread into idle
       pthread_mutex_lock(&monitoraccess);
@@ -757,20 +754,22 @@ void * task_thread(void * arg)  {
     }
   }
 
-  // Putting the thread into the DONE category
-  pthread_mutex_lock(&monitoraccess);  // Entering monitor CS
-  taskmanager.idle.erase(info->name);
-  taskmanager.idlecount--;
-  taskmanager.done.insert(info->name);
-  taskmanager.donecount++;
-  pthread_mutex_unlock(&monitoraccess);
-
   pthread_barrier_wait(&bar2);  // Notifying main thread that we are done
   pthread_barrier_wait(&bar4);  // Synchronizing for exit output
+
+  // Final information output
   pthread_mutex_lock(&outputlock);  // Creating the freed thread output
-  std::cout << "\tFreeing thread: " << info->name << "\t(tid= "
+  std::cout << "[] " << info->name << " (IDLE, runTime= " << info->busyTime
+  << " msec, idleTime= " << info->idleTime << " msec):\n\t(tid= "
   << std::hex << tid << ")" << std::endl;
   std::cout.copyfmt(std::ios(NULL));
+  for  (auto i : info->requiredr)  {
+    // Printing out the required resources
+    // TODO: Say in the README why I hard coded the 0
+    // TODO: Implement the wait time
+    std::cout << "\t" << i.first << ": (needed=\t" << i.second << ", held=\t0)"
+    << std::endl;
+  }
   pthread_mutex_unlock(&outputlock);
 
   pthread_barrier_wait(&bar5);
