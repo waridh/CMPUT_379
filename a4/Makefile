@@ -10,7 +10,7 @@ test:	a4w23
 	./$< a4-cus1.dat 1000 50
 
 test2:	a4w23
-	./$< a4-cus2.dat 500 40
+	./$< a4-cus2.dat 500 4000
 
 test3:	a4w23
 	./$< a4-cus3.dat 500	40
