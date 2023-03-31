@@ -62,13 +62,11 @@ static pthread_mutex_t        monitoraccess;  // Getting running details
 
 static MONITOR_T              taskmanager;  // Details on what is running
 static AVAILR_T               AVAILR_MAP;
+static int                    exitidx;  // For syncing the output
 
 // Cleanup functions
 
 void barrier_ender()  {
-  pthread_mutex_lock(&outputlock);
-
-  std::cout << "\nDestroying the barriers: " << std::endl;
 
   // Unallocating the barriers
   pthread_barrier_destroy(&bar1);
@@ -76,10 +74,6 @@ void barrier_ender()  {
   pthread_barrier_destroy(&bar3);
   pthread_barrier_destroy(&bar4);
   pthread_barrier_destroy(&bar5);
-
-  std::cout << "\tDone!" << std::endl;
-
-  pthread_mutex_unlock(&outputlock);
 }
 
 
@@ -169,7 +163,7 @@ void thread_init_err(THREADREQUIREMENTS * info, pthread_t * tid)  {
 double time_since_start(clock_t * startTime)  {
   clock_t               current_time = times(NULL);
   clock_t               c_seconds_passed = current_time - (*startTime);
-  double                mseconds_passed;
+  unsigned long long    mseconds_passed;
 
   // Setting up the clktck
   pthread_mutex_lock(&clock_setter);
@@ -184,7 +178,7 @@ double time_since_start(clock_t * startTime)  {
   pthread_mutex_unlock(&clock_setter);
 
   // The actual finding of seconds. (It's actually in ms)
-  mseconds_passed = (c_seconds_passed / (double) clktck) * 1000.0;
+  mseconds_passed = (uint) ((c_seconds_passed / (long double) clktck) * 1000.0);
   return mseconds_passed;
 }
 
@@ -332,17 +326,15 @@ void monitor_signal(int signum)  {
   }
   std::cout << std::endl;
 
-  std::cout << "\t\t[DONE]\t";
-  for  (auto i : taskmanager.done)  {
-    std::cout << i << ' ';
-  }
-  std::cout << std::endl;
-
-  std::cout << std::endl;
-
   
-  std::cout << std::endl << "All task threads are done" << std::endl;
-  std::cout << "Exiting monitor thread" << std::endl;
+  pthread_mutex_lock(&resourceaccess);
+  std::cout << "\nSystem Resources:\n";
+  for  (auto i : RESOURCE_MAP.resources)  {
+    // Printing out all the resources
+    std::cout << "\t" << i.first << ":\t(maxAvail=\t" << i.second << ", held=\t"
+    << (i.second - AVAILR_MAP.resources[i.first]) << ")" << std::endl;
+  }
+  pthread_mutex_unlock(&resourceaccess); 
   pthread_mutex_unlock(&outputlock);
   pthread_mutex_unlock(&monitoraccess);
 
@@ -412,6 +404,7 @@ void thread_creator(
     << task_line[1] << "]\nQuitting" << std::endl;
   }
   threadm->thread[task_line[1].c_str()].info.rtypes = tokenscount-4;
+  threadm->thread[task_line[1].c_str()].info.idx = idx;
    
   for  (i = 4; i < tokenscount; i++)  {
     // Collecting the resource requirements in storing it in the struct
@@ -541,7 +534,7 @@ void  thread_main(
 
   // Join the thread and freeing the resources
   pthread_mutex_lock(&outputlock);
-  std::cout << std::endl << "Freeing resources: " << std::endl;
+  std::cout << std::endl << "System Tasks: " << std::endl;
   pthread_mutex_unlock(&outputlock);
   pthread_barrier_wait(&bar4);
 
@@ -552,8 +545,10 @@ void  thread_main(
   barrier_ender();
 
   pthread_mutex_lock(&outputlock);
-  std::cout << "\nCleaning up complete, exiting now" << std::endl;
+  std::cout << "\nRunning time= " << time_since_start(&start) << " msec"
+  << std::endl;
   pthread_mutex_unlock(&outputlock);
+  return;
   exit(EXIT_SUCCESS);
 }
 
@@ -571,7 +566,6 @@ void * monitor_thread(void * arg)  {
   taskmanager.idlecount = 0;
   taskmanager.runcount = 0;
   taskmanager.waitcount = 0;
-  taskmanager.donecount = 0;
   pthread_mutex_unlock(&monitoraccess);
 
   // Barier implement so that the monitor starts at the same time as the thread
@@ -616,13 +610,7 @@ void * monitor_thread(void * arg)  {
     for  (auto i : taskmanager.idle)  {
       std::cout << i << ' ';
     }
-    std::cout << std::endl;
-
-    std::cout << "\t\t[DONE]\t";
-    for  (auto i : taskmanager.done)  {
-      std::cout << i << ' ';
-    }
-    std::cout << std::endl;
+    std::cout << std::endl; 
 
     std::cout << std::endl;
 
@@ -637,6 +625,8 @@ void * monitor_thread(void * arg)  {
 void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
   clock_t                 tstart;
+  clock_t                 waitStart;
+  unsigned long long      waitTime = 0;
   int                     ran;
   uint                    completed = 0;
   pthread_t               tid = pthread_self();
@@ -649,7 +639,7 @@ void * task_thread(void * arg)  {
   pthread_barrier_wait(&bar3);  // We like to keep the threads at around same
 
   // Starting up allocation
-  tstart = times(NULL);  // Getting the thread start time
+  tstart = times(NULL);
   pthread_mutex_lock(&outputlock);
   
   std::cout << "\tStarting task: " << info->name << "\t(tid= " << std::hex
@@ -676,7 +666,7 @@ void * task_thread(void * arg)  {
     pthread_mutex_unlock(&monitoraccess);
 
     /* Checking if there are enough resources to run the program*/
-
+    waitStart = times(NULL);  // Setting up for wait
     pthread_mutex_lock(&resourceaccess);
 
     // Going through loop to access the resources
@@ -707,7 +697,8 @@ void * task_thread(void * arg)  {
       }
     }
     pthread_mutex_unlock(&resourceaccess);  // Done setting up for the program
- 
+    waitTime += time_since_start(&waitStart);  // Keeping count of how long waiting
+
     if (ran)  {
       /* We get into this condition when there are enough resources available */
 
@@ -758,19 +749,33 @@ void * task_thread(void * arg)  {
   pthread_barrier_wait(&bar4);  // Synchronizing for exit output
 
   // Final information output
+  while  (1)  {
+    // Since we have small amount of threads, we can do this
+    pthread_mutex_lock(&resourceaccess);
+    if  (info->idx == exitidx)  {
+      // time to get break out
+      exitidx++;
+      break;
+    }
+    pthread_mutex_unlock(&resourceaccess);
+  }
   pthread_mutex_lock(&outputlock);  // Creating the freed thread output
-  std::cout << "[] " << info->name << " (IDLE, runTime= " << info->busyTime
-  << " msec, idleTime= " << info->idleTime << " msec):\n\t(tid= "
-  << std::hex << tid << ")" << std::endl;
+  std::cout << "[" << info->idx << "] " << info->name << " (IDLE, runTime= "
+  << info->busyTime << " msec, idleTime= " << info->idleTime
+  << " msec):\n\t(tid= " << std::hex << tid << ")" << std::endl;
   std::cout.copyfmt(std::ios(NULL));
   for  (auto i : info->requiredr)  {
     // Printing out the required resources
     // TODO: Say in the README why I hard coded the 0
     // TODO: Implement the wait time
-    std::cout << "\t" << i.first << ": (needed=\t" << i.second << ", held=\t0)"
+    std::cout << "\t" << i.first << ":\t(needed=\t" << i.second << ", held=\t0)"
     << std::endl;
   }
+  std::cout << "\t(RUN: " << NITER << " times, WAIT: " << waitTime << " msec)"
+  << std::endl;
+  std::cout << std::endl;
   pthread_mutex_unlock(&outputlock);
+  pthread_mutex_unlock(&resourceaccess); 
 
   pthread_barrier_wait(&bar5);
 

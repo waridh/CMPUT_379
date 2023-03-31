@@ -22,14 +22,13 @@ The header file for a4w23.cpp.
 // Type declaration
 
 typedef struct  {
+  /* Structure for holding the monitor task manager*/
   std::set<std::string>   wait;
   std::set<std::string>   run;
   std::set<std::string>   idle;
-  std::set<std::string>   done;
   uint                    waitcount;
   uint                    runcount;
   uint                    idlecount;
-  uint                    donecount;
 }  MONITOR_T;
 
 typedef struct  {
@@ -45,10 +44,6 @@ typedef struct  {
   available.*/
 
   std::unordered_map<std::string, int>                resources;
-
-  std::unordered_map<std::string, pthread_mutex_t>    emptylock;
-
-  std::unordered_map<std::string, pthread_cond_t>     conditionsignal;
 } AVAILR_T;
 
 typedef struct  {
@@ -64,6 +59,7 @@ typedef struct  {
   uint                                      busyTime; // Time spent by task
   uint                                      idleTime; // Break time
   uint                                      rtypes;  // The amount of types
+  int                                       idx;
   std::string                               name;
   std::map<std::string, int>                requiredr;  // Using map cause order
 } THREADREQUIREMENTS;
