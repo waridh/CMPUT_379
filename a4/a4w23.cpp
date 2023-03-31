@@ -76,9 +76,6 @@ void barrier_ender()  {
   pthread_barrier_destroy(&bar5);
 }
 
-
-
-
 //=============================================================================
 // Error handling
 
@@ -160,7 +157,7 @@ void thread_init_err(THREADREQUIREMENTS * info, pthread_t * tid)  {
 //=============================================================================
 // Utilities
 
-double time_since_start(clock_t * startTime)  {
+unsigned long long time_since_start(clock_t * startTime)  {
   clock_t               current_time = times(NULL);
   clock_t               c_seconds_passed = current_time - (*startTime);
   unsigned long long    mseconds_passed;
@@ -178,7 +175,8 @@ double time_since_start(clock_t * startTime)  {
   pthread_mutex_unlock(&clock_setter);
 
   // The actual finding of seconds. (It's actually in ms)
-  mseconds_passed = (uint) ((c_seconds_passed / (long double) clktck) * 1000.0);
+  mseconds_passed = (unsigned long long)
+  ((c_seconds_passed / (long double) clktck) * 1000.0);
   return mseconds_passed;
 }
 
@@ -766,7 +764,6 @@ void * task_thread(void * arg)  {
   for  (auto i : info->requiredr)  {
     // Printing out the required resources
     // TODO: Say in the README why I hard coded the 0
-    // TODO: Implement the wait time
     std::cout << "\t" << i.first << ":\t(needed=\t" << i.second << ", held=\t0)"
     << std::endl;
   }

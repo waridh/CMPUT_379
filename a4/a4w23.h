@@ -101,7 +101,7 @@ void    timeprint(
   );
 /* This function creates output on how much cpu time was used*/
 
-double  time_since_start(clock_t * startTime);
+unsigned long long  time_since_start(clock_t * startTime);
 /* This function is created to return the time in milliseconds since the start*/
 
 int     tokenizer(char * cmdline, std::string * tokens);

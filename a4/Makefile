@@ -15,6 +15,9 @@ test2:	a4w23
 test3:	a4w23
 	./$< a4-cus3.dat 500	40
 
+test4:	a4w23
+	./$< a4-ex1.dat 100	40
+
 # This creates the main executable. It's linking pthreads
 a4w23: a4w23.o
 	$(CC) -pthread -o $@ $<
