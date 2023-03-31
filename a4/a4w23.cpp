@@ -680,6 +680,8 @@ void * task_thread(void * arg)  {
       }
       if (!ran)  {
         // There wasn't enough resources
+        /* Now we wait for the task taking the resource to finish and send a
+        condition signal before rechecking the stuff*/
         pthread_cond_wait(
           &resourcecond,
           &resourceaccess
@@ -694,7 +696,8 @@ void * task_thread(void * arg)  {
       }
     }
     pthread_mutex_unlock(&resourceaccess);  // Done setting up for the program
-    waitTime += time_since_start(&waitStart);  // Keeping count of how long waiting
+    // Keeping track of how long it's been waiting
+    waitTime += time_since_start(&waitStart);
 
     if (ran)  {
       /* We get into this condition when there are enough resources available */
@@ -745,12 +748,16 @@ void * task_thread(void * arg)  {
   pthread_barrier_wait(&bar2);  // Notifying main thread that we are done
   pthread_barrier_wait(&bar4);  // Synchronizing for exit output
 
-  // Final information output
+  // Final information output. Need to be output in order
+ 
   while  (1)  {
-    // Since we have small amount of threads, we can do this
+    /* Check so that we output the final output in order. Technically this is
+    less safe and more work than just outputting this information on the main
+    thread, where all this data is store, but I already implemented it and it
+    is relavent*/
     pthread_mutex_lock(&resourceaccess);
     if  (info->idx == exitidx)  {
-      // time to get break out
+      // This is the correct index that needs to be output
       exitidx++;
       break;
     }
@@ -772,8 +779,8 @@ void * task_thread(void * arg)  {
   std::cout << std::endl;
   pthread_mutex_unlock(&outputlock);
   pthread_mutex_unlock(&resourceaccess); 
-
-  pthread_barrier_wait(&bar5);
+  
+  pthread_barrier_wait(&bar5);  // Syncing thread exit with main
   pthread_exit(NULL);
 }
 

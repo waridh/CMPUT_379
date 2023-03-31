@@ -9,8 +9,9 @@ all: a4w23
 test:	a4w23
 	./$< a4-cus1.dat 1000 50
 
+# This is our benchmarking test case
 test2:	a4w23
-	./$< a4-cus2.dat 500 20
+	./$< a4-cus2.dat 500 500
 
 test3:	a4w23
 	./$< a4-cus3.dat 500	40

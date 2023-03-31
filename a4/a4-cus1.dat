@@ -1,9 +1,9 @@
 # This is my custom testing file 1
 
-resources bach:1 love:8 mom:1
+resources bass:1 love:8 sick:1
 resources kat:1 love:10 sad:60
 
 
-task    t1  50  100 bach:1 mom:1  love:10
-task    t2  50  100 love:8  bach:1  kat:1
-task    t3  50  100 love:2  mom:1  kat:1
+task    t1  50  100 bass:1 sick:1  love:10
+task    t2  50  100 love:8  bass:1  kat:1
+task    t3  50  100 love:2  sick:1  kat:1
