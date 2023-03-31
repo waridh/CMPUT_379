@@ -35,7 +35,7 @@ typedef struct  {
   /* This is lookup for resources and counter for max amount. We use a regular
   map so that we can easily print it out for show purposes. It will become
   readonly after it's initialization*/
-  std::map<std::string, int>                resources;
+  std::map<std::string, int>                          resources;
 } RESOURCES_T;
 
 typedef struct  {
@@ -59,9 +59,9 @@ typedef struct  {
   uint                                      busyTime; // Time spent by task
   uint                                      idleTime; // Break time
   uint                                      rtypes;  // The amount of types
-  int                                       idx;
+  int                                       idx;  // So that we could output end
   std::string                               name;
-  std::map<std::string, int>                requiredr;  // Using map cause order
+  std::unordered_map<std::string, int>      requiredr;  // Unordered for speed
 } THREADREQUIREMENTS;
 
 typedef struct  {
@@ -72,8 +72,11 @@ typedef struct  {
 
 typedef struct  {
   /* The big map using name as a key and the value being all information
-  relating to a thread. This should make our program very dynamic*/
-  std::map<std::string, THREADESSENCE>      thread;
+  relating to a thread. This should make our program very dynamic.
+  Built for speed, since we are handling ordered output a different way, and
+  the debug does not care what order it outputs at
+  */
+  std::unordered_map<std::string, THREADESSENCE>      thread;
 }  THREADMAP;
 
 
@@ -117,6 +120,8 @@ void    resource_gatherer(std::string * resource_line, int tokenscount);
 /* This function reads the input file and allocates the resources into the
 program*/
 
+// Thread functions
+
 void *  monitor_thread(void * arg);
 /* This function is the monitor thread*/
 
@@ -158,13 +163,18 @@ void    thread_creator(
 /* This function will create the task threads from the line present in the
 input. The goal here is to launch the thread using this function*/
 
-void monitor_signal(int signum);
+void    monitor_signal(int signum);
 /* Sending a signal that will just terminal the monitor thread. Good for sync*/
 
-// Clean up
+// Shared objects
 
-void barrier_ender();
-/* Clears the barriers*/
+void    barrier_ender();
+/* Clears the barriers. I did not want to put the barriers in an array, so
+we instead need to write as many lines as there are barriers*/
+
+void    barrier_creator(int tasksamount);
+/* Sets up the posix barriers. Needs to take into account the amount of
+tasks that are being used*/
 
 #endif  /* A4W23_H */
 

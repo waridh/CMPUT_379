@@ -29,3 +29,11 @@ task d7 100 50 down:2 sad:40
 
 task  k1  24 22 sad:18
 task  k2  44 44 sad:50
+
+# Filling out the rest of the task so we can test worst case
+
+task  z1  60    30  love:2  kat:1
+task z2  60 60  kat:1  a:1
+task z3   60  90  a:1  up:1
+task z4  60  120  up:1  down:2
+task    z5  60  60  down:2  love:18

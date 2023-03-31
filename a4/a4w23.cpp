@@ -37,11 +37,11 @@ CLANG++
 // Global variables
 // Many of these become read-only after initial declaration in main
 static clock_t                start = times(NULL);
-static const int              DEBUG = 0;
-static uint                   NITER;
+static const int              DEBUG = 0;  // Debug flag when stuff is breaking
+static uint                   NITER;  // Number of iterations the tasks need
 static int                    RESOURCET_COUNT = 0;
 static long                   clktck = 0;  // For conversion into seconds
-static RESOURCES_T            RESOURCE_MAP;
+static RESOURCES_T            RESOURCE_MAP;  // Max amount of resources
 
 // Synchronization
 
@@ -50,6 +50,7 @@ static pthread_barrier_t      bar2;  // Barrier for stopping all the threads
 static pthread_barrier_t      bar3;  // Need this one to let threads start good
 static pthread_barrier_t      bar4;  // For the final closing thread output
 static pthread_barrier_t      bar5;  // Another barrier
+static pthread_barrier_t      bar6;  // Monitor thread end synchronization
 
 static pthread_cond_t         resourcecond;  // Using simplified method
 
@@ -64,7 +65,7 @@ static MONITOR_T              taskmanager;  // Details on what is running
 static AVAILR_T               AVAILR_MAP;
 static int                    exitidx;  // For syncing the output
 
-// Cleanup functions
+// Shared object functions
 
 void barrier_ender()  {
 
@@ -74,6 +75,24 @@ void barrier_ender()  {
   pthread_barrier_destroy(&bar3);
   pthread_barrier_destroy(&bar4);
   pthread_barrier_destroy(&bar5);
+  pthread_barrier_destroy(&bar6);
+}
+
+void barrier_creator(int tasksamount)  {
+  // Synchronication initialization
+  if (pthread_barrier_init(&bar1, NULL, tasksamount + 1) != 0)  {
+    barrier_err();  // Error handling
+  }  else if (pthread_barrier_init(&bar2, NULL, tasksamount + 1) != 0)  {
+    barrier_err();  // Error handling
+  }  else if (pthread_barrier_init(&bar3, NULL, tasksamount + 1) != 0)  {
+    barrier_err();
+  }  else if (pthread_barrier_init(&bar4, NULL, tasksamount + 1) != 0)  {
+    barrier_err();  // Error handling
+  }  else if (pthread_barrier_init(&bar5, NULL, tasksamount + 1) != 0)  {
+    barrier_err();
+  }  else if (pthread_barrier_init(&bar6, NULL, 2) != 0)  {
+    barrier_err();
+  }
 }
 
 //=============================================================================
@@ -346,6 +365,7 @@ void monitor_signal(int signum)  {
 
   resourceprint();  // Printing out the resource allocated to system
   pthread_mutex_unlock(&monitoraccess);
+  pthread_barrier_wait(&bar6);  // Synchronizing with the main thread
 
   pthread_exit(NULL);
 }
@@ -417,11 +437,9 @@ void thread_creator(
    
   for  (i = 4; i < tokenscount; i++)  {
     // Collecting the resource requirements in storing it in the struct
-    // TODO: Error handling for when the resource listed wasn't allocated
     
     requiredr = colon_tokenize(&(task_line[i]), &rname);
     
-
     if  (threadm->thread[task_line[1]].info.requiredr.count(rname) != 0)  {
       threadm->thread[task_line[1]].info.requiredr[rname] += requiredr;
     }  else  {
@@ -435,7 +453,7 @@ void thread_creator(
     NULL,
     task_thread,
     (void *) &(threadm->thread[task_line[1]].info)
-  ) != 0)  {
+  ) != 0)  {  // Error handling for failed thread creation
     std::cout << "Failed to create thread: "
     << threadm->thread[task_line[1]].info.name << std::endl;
     exit(EXIT_FAILURE);  // Error handling
@@ -520,17 +538,7 @@ void  thread_main(
   THREADMAP                 thread_map; 
 
   // Synchronication initialization
-  if (pthread_barrier_init(&bar1, NULL, tasksamount + 1) != 0)  {
-    barrier_err();  // Error handling
-  }  else if (pthread_barrier_init(&bar2, NULL, tasksamount + 1) != 0)  {
-    barrier_err();  // Error handling
-  }  else if (pthread_barrier_init(&bar3, NULL, tasksamount + 1) != 0)  {
-    barrier_err();
-  }  else if (pthread_barrier_init(&bar4, NULL, tasksamount + 1) != 0)  {
-    barrier_err();  // Error handling
-  }  else if (pthread_barrier_init(&bar5, NULL, tasksamount + 1) != 0)  {
-    barrier_err();
-  }
+  barrier_creator(tasksamount); 
 
   // Task thread creation function
   thread_creation(filename, &thread_map);
@@ -540,25 +548,21 @@ void  thread_main(
   pthread_barrier_wait(&bar2);  // Synchronizing the exit
 
   pthread_kill(*monitorthread, SIGALRM);  // Ending the monitor thread
-  usleep(5000);  // 5 msec wait so that it doesn't cause race condition
-  pthread_mutex_lock(&monitoraccess);
+  
+  pthread_barrier_wait(&bar6);  // Waiting for the monitor to close
 
   // Join the thread and freeing the resources
   pthread_mutex_lock(&outputlock);
   std::cout << std::endl << "System Tasks: " << std::endl;
   pthread_mutex_unlock(&outputlock);
-  pthread_barrier_wait(&bar4);
 
-  pthread_barrier_wait(&bar5); 
- 
-  pthread_mutex_unlock(&monitoraccess);
+  pthread_barrier_wait(&bar4);  // Synchronication for letting the thread output
+
+  pthread_barrier_wait(&bar5);  // Knowing that the threads have all completed
 
   barrier_ender();
 
-  pthread_mutex_lock(&outputlock);
-  std::cout << "\nRunning time= " << time_since_start(&start) << " msec"
-  << std::endl;
-  pthread_mutex_unlock(&outputlock);
+  
   return;
 }
 
@@ -594,8 +598,7 @@ void * monitor_thread(void * arg)  {
       pthread_mutex_lock(&outputlock);
     }
 
-    // Critical section safety rails
-    
+    // Critical section safety rails 
     pthread_mutex_lock(&monitoraccess);
 
     // Printing out the waiting threads
@@ -631,13 +634,13 @@ void * monitor_thread(void * arg)  {
 
 void * task_thread(void * arg)  {
   /* Simulates the task required by the assignment*/
-  clock_t                 tstart;
-  clock_t                 waitStart;
-  unsigned long long      waitTime = 0;
-  int                     ran;
-  uint                    completed = 0;
-  pthread_t               tid = pthread_self();
-  THREADREQUIREMENTS *    info = (THREADREQUIREMENTS *) arg;
+  clock_t                               waitStart;
+  unsigned long long                    waitTime = 0;
+  int                                   ran;
+  uint                                  completed = 0;
+  pthread_t                             tid = pthread_self();
+  std::unordered_map<std::string, int>  holding;
+  THREADREQUIREMENTS *                  info = (THREADREQUIREMENTS *) arg;
 
   // Error handling for when the thread needs more than available
   thread_init_err(info, &tid);
@@ -646,21 +649,25 @@ void * task_thread(void * arg)  {
   pthread_barrier_wait(&bar3);  // We like to keep the threads at around same
 
   // Starting up allocation
-  tstart = times(NULL);
-  pthread_mutex_lock(&outputlock);
   
+  pthread_mutex_lock(&outputlock);
+  // Starting task text is a race condition, however, I don't think it matters
   std::cout << "\tStarting task: " << info->name << "\t(tid= " << std::hex
   << tid << ")" << std::endl;
   std::cout.copyfmt(std::ios(NULL));
   pthread_mutex_unlock(&outputlock);
 
-  pthread_mutex_lock(&monitoraccess);
+  // Initializing the resource held
+  for  (auto i : info->requiredr)  {
+    holding[i.first] = 0;
+  }
+
+  pthread_mutex_lock(&monitoraccess);  // Preplacing the task into the idle
   taskmanager.idle.insert(info->name);
   taskmanager.idlecount++;
   pthread_mutex_unlock(&monitoraccess);
-
-  pthread_barrier_wait(&bar1);
-
+ 
+  pthread_barrier_wait(&bar1);  // Synchronizing with the other threads
   while (completed < NITER)  {
     /* The main task thread loop*/
 
@@ -672,8 +679,9 @@ void * task_thread(void * arg)  {
     taskmanager.waitcount++; 
     pthread_mutex_unlock(&monitoraccess);
 
+    waitStart = times(NULL);  // Setting up for wait for accurate reading
+
     /* Checking if there are enough resources to run the program*/
-    waitStart = times(NULL);  // Setting up for wait
     pthread_mutex_lock(&resourceaccess);
 
     // Going through loop to access the resources
@@ -701,6 +709,7 @@ void * task_thread(void * arg)  {
         // Passing the check for having enough resources
         for  (auto i : info->requiredr)  {
           AVAILR_MAP.resources[i.first] -= i.second;  // Actually taking it
+          holding[i.first] += i.second;  // Adding to the holding map
         }
         break;
       }
@@ -719,25 +728,18 @@ void * task_thread(void * arg)  {
       taskmanager.run.insert(info->name);
       taskmanager.runcount++;
       pthread_mutex_unlock(&monitoraccess);
-      usleep((info->busyTime) * 1000);
-
-      // Sending command line output (We have completed the task)
-      pthread_mutex_lock(&outputlock);  // Locking for output
-      std::cout << "task: " << info->name << " (tid= 0x" << std::hex << tid;
-      std::cout.copyfmt(std::ios(NULL));
-      std::cout << ", iter=" << completed << ", time= "
-      << time_since_start(&tstart) << " msec)" << std::endl;
-      pthread_mutex_unlock(&outputlock);
-      
-      // Releasing resources
+      usleep((info->busyTime) * 1000);  // Spending time holding resources
+ 
+      /* Releasing the resources*/
       // Going through loop to access the resources
       pthread_mutex_lock(&resourceaccess);
       for  (auto i : info->requiredr)  {
         AVAILR_MAP.resources[i.first] += i.second;
- 
+        holding[i.first] -= i.second;
         assert(
           AVAILR_MAP.resources[i.first] <= RESOURCE_MAP.resources[i.first]
         );
+        assert(holding[i.first] >= 0);
       }
       pthread_cond_signal(&resourcecond);  // Wake up the waiting thread
       pthread_mutex_unlock(&resourceaccess);  // Let those threads fight for it 
@@ -751,7 +753,22 @@ void * task_thread(void * arg)  {
       pthread_mutex_unlock(&monitoraccess);
       usleep((info->idleTime) * 1000);  // When the thread is idling
 
+      // Sending command line output (We have completed an iteration)
+      pthread_mutex_lock(&outputlock);  // Locking for output
+      std::cout << "task: " << info->name << " (tid= 0x" << std::hex << tid;
+      std::cout.copyfmt(std::ios(NULL));  // Turning off hexadecimal
+      std::cout << ", iter=" << completed << ", time= "
+      << time_since_start(&start) << " msec)" << std::endl;
+      pthread_mutex_unlock(&outputlock);
+
       completed++;
+    }  else  {  // Error handling for a really strange case
+      pthread_mutex_lock(&outputlock);
+      std::cout << "It should have been impossible to get past the blocking "
+      << "without having all the resources\nQuitting" << std::endl;
+      pthread_mutex_unlock(&outputlock);
+      resourceprint();
+      exit(EXIT_FAILURE);
     }
   }
 
@@ -780,12 +797,11 @@ void * task_thread(void * arg)  {
   std::cout.copyfmt(std::ios(NULL));
   for  (auto i : info->requiredr)  {
     // Printing out the required resources
-    // TODO: Say in the README why I hard coded the 0
-    std::cout << "\t" << i.first << ":\t(needed=\t" << i.second << ", held=\t0)"
-    << std::endl;
+    std::cout << "\t" << i.first << ":\t(needed=\t" << i.second << ", held=\t" 
+    << holding[i.first] << ")" << std::endl;
   }
-  std::cout << "\t(RUN: " << NITER << " times, WAIT: " << waitTime << " msec)"
-  << std::endl;
+  std::cout << "\t(RUN: " << completed << " times, WAIT: " << waitTime
+  << " msec)" << std::endl;
   std::cout << std::endl;
   pthread_mutex_unlock(&outputlock);
   pthread_mutex_unlock(&resourceaccess); 
@@ -800,7 +816,7 @@ int  main(int argc, char * argv[])  {
   int         taskcount;
   pthread_t   montid;
   
-  cmdline_err(argc, argv);
+  cmdline_err(argc, argv);  // Error checking for cmdline input
   taskcount = cmdline_eater(argc, argv, &monitorTime);  /* Process some command
   line args */
   
@@ -813,7 +829,12 @@ int  main(int argc, char * argv[])  {
   );
   pthread_detach(montid);
 
-  thread_main(argv[1], taskcount, &montid);
+  thread_main(argv[1], taskcount, &montid);  // Main thread program
+
+  pthread_mutex_lock(&outputlock);  // Running time
+  std::cout << "Running time= " << time_since_start(&start) << " msec\n"
+  << std::endl;
+  pthread_mutex_unlock(&outputlock);
 
   return 0;
 }
