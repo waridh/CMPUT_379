@@ -549,7 +549,6 @@ void  thread_main(
   << std::endl;
   pthread_mutex_unlock(&outputlock);
   return;
-  exit(EXIT_SUCCESS);
 }
 
 //=============================================================================
@@ -778,7 +777,6 @@ void * task_thread(void * arg)  {
   pthread_mutex_unlock(&resourceaccess); 
 
   pthread_barrier_wait(&bar5);
-
   pthread_exit(NULL);
 }
 
