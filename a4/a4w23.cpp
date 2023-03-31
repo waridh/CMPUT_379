@@ -208,6 +208,20 @@ void timeprint(
 	return;
 }
 
+void resourceprint()  {
+  pthread_mutex_lock(&outputlock);
+  pthread_mutex_lock(&resourceaccess);
+  std::cout << "\nSystem Resources:\n";
+  for  (auto i : RESOURCE_MAP.resources)  {
+    // Printing out all the resources
+    std::cout << "\t" << i.first << ":\t(maxAvail=\t" << i.second << ", held=\t"
+    << (i.second - AVAILR_MAP.resources[i.first]) << ")" << std::endl;
+  }  // Did an actual check if there were held resources
+  pthread_mutex_unlock(&resourceaccess);
+  pthread_mutex_unlock(&outputlock);
+  return;
+}
+
 int tokenizer(char * cmdline, std::string * tokens)  {
   /* Goal here is to tokenize the c string input*/
   char							WSPACE[] = "\t ";
@@ -261,13 +275,18 @@ int cmdline_eater(int argc, char * argv[], int * monitorTime)  {
       taskcount++;
     }
   }
-  std::cout << std::endl;
-  std::cout << "Resources given:" << std::endl;
+
   for  (auto i : RESOURCE_MAP.resources)  {
-    // Printing out useful resource informations
-    std::cout << '\t' << i.first << ": " << i.second << std::endl;
+    // Allocating the available resources
     AVAILR_MAP.resources[i.first] = i.second;
   }
+  if (DEBUG)  {
+    // A check on how many resources we have at the beginning
+    resourceprint();
+    // std::cout << std::endl;
+    // std::cout << "Resources given:" << std::endl;
+  }
+  
 
   fp.close();
   return taskcount;
@@ -323,17 +342,9 @@ void monitor_signal(int signum)  {
     std::cout << i << ' ';
   }
   std::cout << std::endl;
+  pthread_mutex_unlock(&outputlock);  // Letting go of the output lock
 
-  
-  pthread_mutex_lock(&resourceaccess);
-  std::cout << "\nSystem Resources:\n";
-  for  (auto i : RESOURCE_MAP.resources)  {
-    // Printing out all the resources
-    std::cout << "\t" << i.first << ":\t(maxAvail=\t" << i.second << ", held=\t"
-    << (i.second - AVAILR_MAP.resources[i.first]) << ")" << std::endl;
-  }
-  pthread_mutex_unlock(&resourceaccess); 
-  pthread_mutex_unlock(&outputlock);
+  resourceprint();  // Printing out the resource allocated to system
   pthread_mutex_unlock(&monitoraccess);
 
   pthread_exit(NULL);
@@ -479,16 +490,18 @@ void thread_creation(
   
   // Debugging output for the threads that have allocated
   pthread_mutex_lock(&outputlock);
-  std::cout << std::endl;
-  std::cout << "Task threads:\n\t";
-  for  (auto  i : thread_map->thread)  {
-    std::cout << "Name: " << i.first << ", busyTime: " << i.second.info.busyTime
-    << ", idleTime: " << i.second.info.idleTime << ", ResourcesTypes: "
-    << i.second.info.rtypes << ", ";
-    for (auto j : i.second.info.requiredr)  {
-      std::cout << j.first << ": " << j.second << ", ";
+  if  (DEBUG)  {
+    std::cout << std::endl;
+    std::cout << "Task threads:\n\t";
+    for  (auto  i : thread_map->thread)  {
+      std::cout << "Name: " << i.first << ", busyTime: " << i.second.info.busyTime
+      << ", idleTime: " << i.second.info.idleTime << ", ResourcesTypes: "
+      << i.second.info.rtypes << ", ";
+      for (auto j : i.second.info.requiredr)  {
+        std::cout << j.first << ": " << j.second << ", ";
+      }
+      std::cout << "\n\t";
     }
-    std::cout << "\n\t";
   }
   std::cout << std::endl; 
   std::cout << "Running threads:" << std::endl;
@@ -576,12 +589,9 @@ void * monitor_thread(void * arg)  {
     pthread_mutex_lock(&outputlock);
     if  (DEBUG)  {
       // Sending output for what resources are available
-      pthread_mutex_lock(&resourceaccess);
-      std::cout << std::endl << "resources: ";
-      for  (auto i : AVAILR_MAP.resources)  {
-        std::cout << '\t' << i.first << ": " << i.second << std::endl;
-      }
-      pthread_mutex_unlock(&resourceaccess); 
+      pthread_mutex_unlock(&outputlock);
+      resourceprint();
+      pthread_mutex_lock(&outputlock);
     }
 
     // Critical section safety rails

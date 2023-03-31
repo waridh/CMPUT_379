@@ -93,6 +93,9 @@ many resource requirements and when the resource does not exist*/
 
 // Utilities
 
+void    resourceprint();
+// Prints out the amount of resources allocated to the system
+
 void    timeprint(
   clock_t &time1,
   clock_t &time2,
