@@ -29,7 +29,7 @@ a4w23.o: a4w23.cpp
 
 # Making a tarball
 tar: clean
-	tar -czvf wongwandanee-a4.tar.gz a4w23.cpp a4w23.h Makefile README.md README.pdf a4-cus* a4-ex*
+	tar -czvf wongwandanee-a4.tar.gz a4w23.* Makefile README.* a4-cus* a4-ex*
 
 untar:
 	rm -f *.tar.gz
