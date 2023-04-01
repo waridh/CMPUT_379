@@ -6,7 +6,7 @@ task    t2  500  0 love:8  charm:1  strange:5
 task    t3  500  10 love:18  strange:12
 task    another  700 10  charm:2 strange:43 love:70
 
-task    a1  500 10 a:1 b:1
-task    a2  500 10 b:1 c:1
-task    a3  500 10 a:1 c:1
+task    a1  0 0 a:1 b:1
+task    a2  100 500 b:1 c:1
+task    a3  0 10 a:1 c:1
 

@@ -59,8 +59,88 @@ synchronization. It's a little random, but we are relying on pthread mutex to
 allow even progress to let the thread with the correct index access the section.
 As the threads are able to create output, there will be less and less threads
 trying to access the index. This is how I was able to make the threads print
-their final outputs in order.
+their final outputs in order. In the future, I would try to implement a more
+efficient synchronization method for syncing the final output, however, this
+little extra feature does not seem to affect main objective being asked by the
+assignment.
+12. We are using times.h to get the millisecond count of the program. A strange
+interaction to note is that we are not getting true single digit millisecond
+accuracy in the output. I wasn't sure why that is, since it was still happening
+when I swapped to using c++ std::chrono. Currently, we are getting msec data
+that are accurate to the 10s of msec. The final digit seems to only ever be 0.
+What is interesting is that this issue seems to also affect the example output
+given in the rubric, so I assume it's not an issue that only I am facing.
+Hopefully this doesn't really affect the grading of the assignment as it's not
+the main point of the assignment.
+13. Things that are not mentioned here should be following the given guideline.
+14. Finally, we have a little indicator at the beginning printing out the
+threads that are starting.
 
 ## Project Status
+
+The project should be working completely as specified by the assignment rubric
+with perhaps some extra features. There are no current known issues.  
+As for difficulties that I encountered during this assignment, I have had to
+face many. Unlike other students who most likely finished this assignment in
+8-10 hours, I believe I have spent upwards of 40 hours on this assignment.
+Some of the strange things I had done in this assignment was using pthread_mutex
+instead of posix semaphores, making me design for binary semaphore instead of
+a counting semaphore, which was aledgedly easier. I also outputted some prints
+through the task threads instead of the main thread. Here are some of the main
+difficulties I encountered.
+1. First issue I encountered was manual dynamic allocation of memory. I used to
+have much more dynamically allocated arrays, however, failure to destroy pthread
+barrier objects in a different text segment caused garbage collection in the
+text parsing function to cause a segmentation fault. To solve this issue, I
+decided to use static sized character arrays instead of dynamically allocated
+character arrays in functions. As for global variables that are being used for
+critical sections, I used std::map/std::unordered_map to store resource
+information and the monitor information as well.
+2. The second issue I had encounterd was that I was trying to use circular wait
+prevention by ordering the resources and forcing all tasks to grab these
+resources in descending order. This would give better concurrency and evenly
+distribute the progress of the tasks. The first issue I ran into was that I was
+grabbing one resource unit at a time instead of taking a chunk. This method
+works well with test cases where there are only one unit of resources for a
+resource type, however, once there are much more resource units, and multiple
+threads want to grab a large amount of this resource, those threads will be
+deadlocked.
+3. After I swapped the implementation so that it would take in the full chunk
+and wait if there are not enough resources, we were still having a mysterious
+deadlock that was happening rarely and randomly. After some hours trying to
+find out what was causing this issue, I gave in and swapped to the recommended
+deadlock prevention method of waiting for all resources to be available before
+grabbing them and running the program. The flaw I saw with this method is that
+program progression will be a little more random, however, it is much more
+reliable in test cases than my orignal method.
+
 ## Testing and Results
+
+I created three custom test cases for this assignment and used the given test
+case as well. The first custom testcase was simply to run a quick circular wait
+scenario to check if the program worked, and was able to avoid simple deadlocks.
+The second test case is a stress test case where we have maximum resource types
+and task threads. The resource units for each resource types also vary in this
+test, and the tasks will contest each other when grabbing these resources. This
+test was done with 1000 iterations to try and cause a deadlock to occur. The
+third test case was created to test weird timing cases where a task doesn't have
+to do an idlewait while others don't need to do a busy wait, or both. It's
+really just a check for robustness and if a deadlock would occur because of a
+mistake. Finally the given test case is there to more sure that the outputs are
+somewhat matching.  
+The result from lastest testing was that I was unable to cause a deadlock using
+the code. The format matches with the one given by the assignment rubric. The
+concurrency of the program is there as threads are able to be in the RUN state
+at the same time, however the distribution of progress is not as good as when
+the program was using circular wait prevention as opposed to the current resouce
+checking method. Since resource checking is somewhat more random than circular
+wait prevention, the waiting time output for the given example test case will
+vary by 100 msec from around 50 msec wait to 250 msec wait. We were able to run
+the 1000 iteration test case 2 around 20 times as I was writing this README, so
+I believe that there are no deadlocks with the cases that I created.
+
 ## Acknowledgments
+
+1. GeeksForGeeks
+2. I think one of the function in the code is from APUE
+3. The TAs
