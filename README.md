@@ -3,5 +3,5 @@ My repository for CMPUT 379 Operating systems class. I recommend that when you t
 
 ## Recommended tools
 
-Use CLANG instead of gcc or g++, it will be much more compatible all your operating systems, however this class specifically foocuses on UNIX programming, so I think that you would greatly benefit from using a UNIX like operating system that is POSIX compliant. LLVM is also better than whatever each operating systems have to offer.  
+Use CLANG instead of gcc or g++, it will be much more compatible all your operating systems, however this class specifically foocuses on UNIX programming, so I think that you would greatly benefit from using a UNIX like operating system that is POSIX compliant. CLANG offers some nice related features that are not available when using `gcc` so I believe that it is worth a shot to try.  
 The textbook (Advanced Programming in the Unix Environment) is also a really good tool for this class, teaches you lots of things. Good luck, I suppose.
