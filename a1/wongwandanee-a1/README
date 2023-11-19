@@ -2,8 +2,6 @@
 
 Credentials:
 	Name: Waridh "Bach" Wongwandanee
-	CCID: waridh
-	SID: 1603722
 
 Make targets:
 	a1p2:	The target will generate the executable for assignment 1 part 2. You
