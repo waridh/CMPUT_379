@@ -1,7 +1,6 @@
 # CMPUT 379 Assignment 3
 
 &nbsp;&nbsp;name: Waridh 'Bach' Wongwandanee  
-&nbsp;&nbsp;ccid: waridh  
 
 ## Objectives
 
