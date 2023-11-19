@@ -2,7 +2,6 @@
 
 &nbsp;&nbsp;name: Waridh 'Bach' Wongwandanee  
 &nbsp;&nbsp;ccid: waridh  
-&nbsp;&nbsp;sid:  1603722  
 
 ## Objectives
 
